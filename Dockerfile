@@ -30,7 +30,6 @@ RUN cd frontend && npm run build
 
 # Copy backend source
 COPY backend ./backend
-COPY .env ./
 
 # Expose default port
 EXPOSE 8000
