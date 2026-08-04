@@ -1,10 +1,13 @@
 import os
 import base64
-from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 
-load_dotenv()
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+except ImportError:
+    pass
 
 def get_or_create_fernet_key():
     key = os.getenv("CREDENTIAL_ENCRYPTION_KEY", "")
@@ -19,7 +22,6 @@ def get_or_create_fernet_key():
 
 def get_database_url():
     url = os.getenv("DATABASE_URL", "sqlite:///./opportunity_agent.db")
-    # Fix Heroku/Render legacy postgres:// URI scheme for SQLAlchemy 2.0
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     return url
