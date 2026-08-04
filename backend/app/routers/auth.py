@@ -52,9 +52,7 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
     db.add(otp_record)
     db.commit()
 
-    # Dispatch real-time OTP email if SMTP is configured
     email_sent = send_otp_email(email, otp_code)
-
     logger.info(f"🔑 Real-Time OTP generated for {email}: {otp_code}")
 
     log = ActivityLog(
@@ -67,7 +65,7 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
 
     return {
         "message": f"Verification code sent to {email}! Check your inbox or system console.",
-        "otp_code": otp_code,  # Displayed in UI banner for instant testing
+        "otp_code": otp_code,
         "email_sent_to_inbox": email_sent,
         "expires_in_minutes": 10
     }
@@ -75,13 +73,28 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
 @router.post("/verify-otp-signup", response_model=AuthMessageResponse)
 def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
-    otp_code = payload.otp_code.strip()
+    # Strip spaces and formatting from OTP code
+    otp_code = re.sub(r"\D", "", payload.otp_code)
     password = payload.password
+
+    if not otp_code or len(otp_code) != 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid 6-digit OTP code."
+        )
 
     if len(password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 6 characters long."
+        )
+
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please log in."
         )
 
     otp_record = db.query(OTPVerification).filter(

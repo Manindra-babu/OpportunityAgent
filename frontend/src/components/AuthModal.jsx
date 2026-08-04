@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Mail, User, Lock, ArrowRight, RefreshCw, AlertCircle, KeyRound, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { requestOTP, verifyOTPAndSignup } from '../api/client';
 
-export default function AuthModal({ onLogin, onSignup }) {
+export default function AuthModal({ onLogin, onSignup, onSuccessAuth }) {
   const [isSignup, setIsSignup] = useState(false);
-  const [step, setStep] = useState(1); // 1 = Enter Email/Name & Request OTP, 2 = Enter OTP Code & Password
+  const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -26,6 +26,7 @@ export default function AuthModal({ onLogin, onSignup }) {
       setSuccessInfo(res.message);
       if (res.otp_code) {
         setDemoOtpHint(res.otp_code);
+        setOtpCode(res.otp_code); // Auto-prefill for smooth 1-click testing
       }
       setStep(2);
     } catch (err) {
@@ -47,8 +48,13 @@ export default function AuthModal({ onLogin, onSignup }) {
         password,
         full_name: fullName || 'Candidate'
       });
-      // Call parent onSignup state update
-      await onSignup({ email, password, full_name: fullName || 'Candidate' });
+
+      // User account is created & session cookie is set
+      if (onSuccessAuth) {
+        await onSuccessAuth(res.user);
+      } else if (onSignup) {
+        await onSignup(res.user);
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'OTP verification failed. Please check the 6-digit code.');
     } finally {

@@ -99,11 +99,22 @@ export default function App() {
     checkAuth();
   }, []);
 
-  const handleSignup = async (payload) => {
-    const res = await signup(payload);
-    if (res.user) {
-      setCurrentUser(res.user);
+  const handleSuccessAuth = async (user) => {
+    if (user) {
+      setCurrentUser(user);
       await loadUserData();
+    }
+  };
+
+  const handleSignup = async (payload) => {
+    if (payload?.id) {
+      await handleSuccessAuth(payload);
+    } else {
+      const res = await signup(payload);
+      if (res.user) {
+        setCurrentUser(res.user);
+        await loadUserData();
+      }
     }
   };
 
@@ -118,48 +129,39 @@ export default function App() {
   const handleLogout = async () => {
     await logout();
     setCurrentUser(null);
-    setProfile(null);
-    setOpportunities([]);
   };
 
   const handleSaveGroqKey = async (key) => {
-    const res = await saveGroqKey(key);
-    const updatedCreds = await getCredentialsStatus();
-    setCredStatus(updatedCreds);
-    return res;
+    await saveGroqKey(key);
+    await loadUserData();
   };
 
   const handleDeleteGroqKey = async () => {
     await deleteGroqKey();
-    const updatedCreds = await getCredentialsStatus();
-    setCredStatus(updatedCreds);
+    await loadUserData();
   };
 
   const handleStartGmailOAuth = async () => {
     const res = await startGmailOAuth();
-    if (res.redirect && res.url) {
-      window.location.href = res.url;
-    } else {
-      const updatedCreds = await getCredentialsStatus();
-      setCredStatus(updatedCreds);
+    if (res.authorization_url) {
+      window.location.href = res.authorization_url;
     }
   };
 
   const handleDeleteGmail = async () => {
     await deleteGmail();
-    const updatedCreds = await getCredentialsStatus();
-    setCredStatus(updatedCreds);
+    await loadUserData();
   };
 
-  const handleUploadResume = async (formData) => {
-    const updatedProf = await uploadResume(formData);
-    setProfile(updatedProf);
+  const handleUploadResume = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    await uploadResume(formData);
     await loadUserData();
   };
 
   const handleSyncGithub = async (username) => {
-    const updatedProf = await syncGithub(username);
-    setProfile(updatedProf);
+    await syncGithub(username);
     await loadUserData();
   };
 
@@ -167,10 +169,7 @@ export default function App() {
     setOppLoading(true);
     try {
       await triggerDiscovery();
-      const oppData = await getOpportunities();
-      setOpportunities(oppData);
-      const logData = await getActivityLogs();
-      setLogs(logData);
+      await loadUserData();
     } finally {
       setOppLoading(false);
     }
@@ -178,47 +177,48 @@ export default function App() {
 
   const handleManualAction = async (oppId, action) => {
     await manualAction({ opportunity_id: oppId, action });
-    const oppData = await getOpportunities();
-    setOpportunities(oppData);
-    const logData = await getActivityLogs();
-    setLogs(logData);
+    await loadUserData();
   };
 
   const handleRefreshNews = async () => {
     setNewsLoading(true);
     try {
       await refreshNews();
-      const updatedNews = await getNews();
-      setNews(updatedNews);
+      await loadUserData();
     } finally {
       setNewsLoading(false);
     }
   };
 
-  const handleUpdateThreshold = async (threshold) => {
-    await updateThreshold(threshold);
-    setSettings((prev) => ({ ...prev, relevance_threshold: threshold }));
+  const handleUpdateThreshold = async (val) => {
+    await updateThreshold(val);
     await loadUserData();
   };
 
-  const handleSubmitFix = async (payload) => {
-    await submitUserFix(payload);
+  const handleSubmitFix = async (oppId, fieldName, fieldValue, rememberRule) => {
+    await submitUserFix({
+      opportunity_id: oppId,
+      field_name: fieldName,
+      field_value: fieldValue,
+      remember_rule: rememberRule
+    });
     await loadUserData();
   };
 
   if (authChecking) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center text-xs text-zinc-500">
-        Loading OpportunityAgent BYOK Platform...
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-zinc-900 font-sans flex flex-col antialiased">
-      {/* Auth Modal if user is not logged in */}
+    <div className="min-h-screen bg-zinc-50 flex flex-col font-sans">
+      
+      {/* Auth Modal if Not Logged In */}
       {!currentUser && (
-        <AuthModal onLogin={handleLogin} onSignup={handleSignup} />
+        <AuthModal onLogin={handleLogin} onSignup={handleSignup} onSuccessAuth={handleSuccessAuth} />
       )}
 
       {/* Header */}
