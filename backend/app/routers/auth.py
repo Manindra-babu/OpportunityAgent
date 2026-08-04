@@ -11,6 +11,7 @@ from app.schemas import (
     RequestOTPPayload, VerifyOTPAndSignupPayload
 )
 from app.security.auth import hash_password, verify_password, create_jwt_token, get_current_user
+from app.services.notification_agent import send_otp_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -34,11 +35,9 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
             detail="An account with this email address already exists. Please log in instead."
         )
 
-    # Generate 6-digit OTP code
     otp_code = str(random.randint(100000, 999999))
     expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
 
-    # Invalidate previous unverified OTPs for this email
     db.query(OTPVerification).filter(
         OTPVerification.email == email,
         OTPVerification.is_verified == False
@@ -53,20 +52,23 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
     db.add(otp_record)
     db.commit()
 
+    # Dispatch real-time OTP email if SMTP is configured
+    email_sent = send_otp_email(email, otp_code)
+
     logger.info(f"🔑 Real-Time OTP generated for {email}: {otp_code}")
 
-    # Log in activity timeline
     log = ActivityLog(
         agent_name="Auth Security Agent",
         action="Real-Time Signup OTP Dispatched",
-        details=f"Generated 6-digit OTP [{otp_code}] for email: {email} (Expires in 10 mins)."
+        details=f"Generated 6-digit OTP [{otp_code}] for email: {email} (Sent to inbox: {email_sent})."
     )
     db.add(log)
     db.commit()
 
     return {
-        "message": f"Verification code sent to {email}. Check your inbox or system console!",
-        "otp_code": otp_code,  # Returned for easy instant testing in demo mode
+        "message": f"Verification code sent to {email}! Check your inbox or system console.",
+        "otp_code": otp_code,  # Displayed in UI banner for instant testing
+        "email_sent_to_inbox": email_sent,
         "expires_in_minutes": 10
     }
 
@@ -82,7 +84,6 @@ def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db
             detail="Password must be at least 6 characters long."
         )
 
-    # Find active OTP record
     otp_record = db.query(OTPVerification).filter(
         OTPVerification.email == email,
         OTPVerification.otp_code == otp_code,
@@ -101,23 +102,19 @@ def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db
             detail="OTP code has expired. Please click 'Resend OTP' for a new code."
         )
 
-    # Mark OTP as verified
     otp_record.is_verified = True
 
-    # Create User
     hashed_pw = hash_password(password)
     user = User(email=email, password_hash=hashed_pw)
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # Initialize Profile and Credentials
     profile = Profile(user_id=user.id, email=email, full_name=payload.full_name or "Candidate")
     cred = UserCredential(user_id=user.id)
     db.add(profile)
     db.add(cred)
 
-    # Log in activity timeline
     log = ActivityLog(
         user_id=user.id,
         agent_name="Auth Security Agent",

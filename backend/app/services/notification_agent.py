@@ -1,5 +1,9 @@
+import os
+import smtplib
 import logging
 import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import Session
 from app.models import Profile, Opportunity, OpportunityScore, Registration, ActivityLog, UserCredential
 from app.security.crypto import decrypt_credential
@@ -10,6 +14,55 @@ def log_activity(db: Session, user_id: int, agent_name: str, action: str, detail
     log = ActivityLog(user_id=user_id, agent_name=agent_name, action=action, details=details)
     db.add(log)
     db.commit()
+
+def send_otp_email(to_email: str, otp_code: str) -> bool:
+    """
+    Dispatches 6-digit verification OTP email to user's inbox via SMTP if configured.
+    """
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_email = os.getenv("SMTP_EMAIL", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+
+    if smtp_email and smtp_password:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"🔑 Your OpportunityAgent Verification Code: {otp_code}"
+            msg["From"] = f"OpportunityAgent <{smtp_email}>"
+            msg["To"] = to_email
+
+            text_body = f"Hello,\n\nYour 6-digit verification code for OpportunityAgent is: {otp_code}\n\nThis code will expire in 10 minutes."
+            html_body = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; background-color: #f9fafb; padding: 20px;">
+                <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 16px; border: 1px solid #e5e7eb;">
+                  <h2 style="color: #4f46e5; margin-top: 0;">OpportunityAgent Account Verification</h2>
+                  <p style="color: #374151; font-size: 14px;">Welcome! Please enter the 6-digit code below to verify your email address and complete account setup:</p>
+                  <div style="background-color: #e0e7ff; color: #3730a3; padding: 15px; font-size: 28px; font-weight: bold; font-family: monospace; letter-spacing: 6px; text-align: center; border-radius: 12px; margin: 20px 0;">
+                    {otp_code}
+                  </div>
+                  <p style="color: #6b7280; font-size: 12px;">This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
+                </div>
+              </body>
+            </html>
+            """
+
+            msg.attach(MIMEText(text_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
+
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.sendmail(smtp_email, to_email, msg.as_string())
+
+            logger.info(f"✅ Real OTP email delivered to {to_email} via SMTP")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to dispatch SMTP email to {to_email}: {e}")
+            return False
+    else:
+        logger.info(f"ℹ️ SMTP not configured in .env. OTP code [{otp_code}] generated for {to_email}.")
+        return False
 
 def poll_gmail_replies(db: Session):
     """
