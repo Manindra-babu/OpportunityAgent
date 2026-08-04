@@ -2,6 +2,28 @@ import datetime
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = "Candidate"
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class AuthMessageResponse(BaseModel):
+    message: str
+    token: str
+    user: UserResponse
+
 class ProfileBase(BaseModel):
     skills: List[str] = []
     projects: List[Dict[str, Any]] = []
