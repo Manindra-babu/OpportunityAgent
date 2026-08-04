@@ -1,0 +1,28 @@
+# Environment & Secrets
+.env
+*.env
+!.env.example
+
+# Database & SQLite
+*.db
+*.sqlite3
+opportunity_agent.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+uploaded_resumes/
+
+# Node & Frontend
+frontend/node_modules/
+frontend/dist/
+.ds_store
+
+# IDE & Gemini
+.idea/
+.vscode/
+.gemini/

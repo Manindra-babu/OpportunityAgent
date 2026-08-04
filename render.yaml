@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: opportunity-agent
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./opportunity_agent.db
+      - key: RELEVANCE_THRESHOLD
+        value: "70.0"
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false

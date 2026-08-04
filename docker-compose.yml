@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - DATABASE_URL=sqlite:///./opportunity_agent.db
+      - JWT_SECRET=opportunity-agent-super-secret-jwt-key-2026
+      - CREDENTIAL_ENCRYPTION_KEY=
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+    volumes:
+      - ./data:/app/backend/data
+    restart: unless-stopped
