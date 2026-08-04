@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// Automatically detect local vs production unified origin
 const API_BASE = import.meta.env.VITE_API_BASE !== undefined
   ? import.meta.env.VITE_API_BASE
   : (typeof window !== 'undefined' && window.location.origin.includes('5173')
@@ -14,6 +13,16 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+export const requestOTP = async (email) => {
+  const res = await api.post('/auth/request-otp', { email });
+  return res.data;
+};
+
+export const verifyOTPAndSignup = async (payload) => {
+  const res = await api.post('/auth/verify-otp-signup', payload);
+  return res.data;
+};
 
 export const signup = async (payload) => {
   const res = await api.post('/auth/signup', payload);

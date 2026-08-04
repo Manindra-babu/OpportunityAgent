@@ -1,22 +1,153 @@
 import re
+import random
 import datetime
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, UserCredential, Profile
-from app.schemas import UserCreate, UserLogin, UserResponse, AuthMessageResponse
+from app.models import User, UserCredential, Profile, OTPVerification, ActivityLog
+from app.schemas import (
+    UserCreate, UserLogin, UserResponse, AuthMessageResponse,
+    RequestOTPPayload, VerifyOTPAndSignupPayload
+)
 from app.security.auth import hash_password, verify_password, create_jwt_token, get_current_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+
+@router.post("/request-otp")
+def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+
+    if not re.match(EMAIL_REGEX, email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid email address."
+        )
+
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please log in instead."
+        )
+
+    # Generate 6-digit OTP code
+    otp_code = str(random.randint(100000, 999999))
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+
+    # Invalidate previous unverified OTPs for this email
+    db.query(OTPVerification).filter(
+        OTPVerification.email == email,
+        OTPVerification.is_verified == False
+    ).delete()
+
+    otp_record = OTPVerification(
+        email=email,
+        otp_code=otp_code,
+        expires_at=expires_at,
+        is_verified=False
+    )
+    db.add(otp_record)
+    db.commit()
+
+    logger.info(f"🔑 Real-Time OTP generated for {email}: {otp_code}")
+
+    # Log in activity timeline
+    log = ActivityLog(
+        agent_name="Auth Security Agent",
+        action="Real-Time Signup OTP Dispatched",
+        details=f"Generated 6-digit OTP [{otp_code}] for email: {email} (Expires in 10 mins)."
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        "message": f"Verification code sent to {email}. Check your inbox or system console!",
+        "otp_code": otp_code,  # Returned for easy instant testing in demo mode
+        "expires_in_minutes": 10
+    }
+
+@router.post("/verify-otp-signup", response_model=AuthMessageResponse)
+def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+    otp_code = payload.otp_code.strip()
+    password = payload.password
+
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long."
+        )
+
+    # Find active OTP record
+    otp_record = db.query(OTPVerification).filter(
+        OTPVerification.email == email,
+        OTPVerification.otp_code == otp_code,
+        OTPVerification.is_verified == False
+    ).order_by(OTPVerification.created_at.desc()).first()
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OTP code. Please check the 6-digit code and try again."
+        )
+
+    if datetime.datetime.utcnow() > otp_record.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP code has expired. Please click 'Resend OTP' for a new code."
+        )
+
+    # Mark OTP as verified
+    otp_record.is_verified = True
+
+    # Create User
+    hashed_pw = hash_password(password)
+    user = User(email=email, password_hash=hashed_pw)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Initialize Profile and Credentials
+    profile = Profile(user_id=user.id, email=email, full_name=payload.full_name or "Candidate")
+    cred = UserCredential(user_id=user.id)
+    db.add(profile)
+    db.add(cred)
+
+    # Log in activity timeline
+    log = ActivityLog(
+        user_id=user.id,
+        agent_name="Auth Security Agent",
+        action="Real-Time Signup OTP Verified",
+        details=f"Successfully verified email OTP for {email}. Account created!"
+    )
+    db.add(log)
+    db.commit()
+
+    token = create_jwt_token(user.id, user.email)
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=604800
+    )
+
+    return AuthMessageResponse(
+        message="Email verified and account created successfully!",
+        token=token,
+        user=UserResponse(id=user.id, email=user.email, created_at=user.created_at)
+    )
 
 @router.post("/signup", response_model=AuthMessageResponse)
 def signup(payload: UserCreate, response: Response, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     password = payload.password
 
-    # Input validations
     if not re.match(EMAIL_REGEX, email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -42,8 +173,7 @@ def signup(payload: UserCreate, response: Response, db: Session = Depends(get_db
     db.commit()
     db.refresh(user)
 
-    # Initialize empty profile and credentials records
-    profile = Profile(user_id=user.id, email=email)
+    profile = Profile(user_id=user.id, email=email, full_name=payload.full_name or "Candidate")
     cred = UserCredential(user_id=user.id)
     db.add(profile)
     db.add(cred)

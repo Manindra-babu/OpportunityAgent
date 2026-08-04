@@ -2,6 +2,15 @@ import datetime
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 
+class RequestOTPPayload(BaseModel):
+    email: str
+
+class VerifyOTPAndSignupPayload(BaseModel):
+    email: str
+    otp_code: str
+    password: str
+    full_name: Optional[str] = "Candidate"
+
 class UserCreate(BaseModel):
     email: str
     password: str
