@@ -9,7 +9,8 @@ export default function ProfilePage({
   onSaveGroqKey,
   onDeleteGroqKey,
   onStartGmailOAuth,
-  onDeleteGmail
+  onDeleteGmail,
+  onRefresh
 }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [githubInput, setGithubInput] = useState(profile?.github_username || '');
@@ -22,6 +23,10 @@ export default function ProfilePage({
   const [validatingGroq, setValidatingGroq] = useState(false);
   const [groqError, setGroqError] = useState('');
   const [groqSuccessMsg, setGroqSuccessMsg] = useState('');
+
+  // Gmail connection state
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailMsg, setGmailMsg] = useState('');
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -65,10 +70,29 @@ export default function ProfilePage({
       const res = await onSaveGroqKey(groqKeyInput.trim());
       setGroqSuccessMsg(res.message || 'Groq API Key validated and saved securely!');
       setGroqKeyInput('');
+      if (onRefresh) await onRefresh();
     } catch (err) {
-      setGroqError(err.response?.data?.detail || 'Invalid Groq API Key. Groq API validation failed.');
+      setGroqError(err.response?.data?.detail || 'Invalid Groq API Key format. Must start with "gsk_".');
     } finally {
       setValidatingGroq(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    setGmailLoading(true);
+    setGmailMsg('');
+    try {
+      const res = await onStartGmailOAuth();
+      if (res.redirect && res.url) {
+        window.location.href = res.url;
+      } else {
+        setGmailMsg(res.message || 'Gmail connected!');
+        if (onRefresh) await onRefresh();
+      }
+    } catch (err) {
+      setGmailMsg('Failed to connect Gmail account.');
+    } finally {
+      setGmailLoading(false);
     }
   };
 
@@ -122,7 +146,7 @@ export default function ProfilePage({
 
               {!credStatus?.groq_connected && (
                 <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/60 text-[11px] text-amber-800">
-                  Add your Groq API key to enable AI opportunity filtering & resume parsing.
+                  Add your Groq API key (starts with <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">gsk_...</code>) to enable AI match scoring & resume parsing.
                 </div>
               )}
 
@@ -164,7 +188,10 @@ export default function ProfilePage({
                   {credStatus?.groq_connected && (
                     <button
                       type="button"
-                      onClick={onDeleteGroqKey}
+                      onClick={async () => {
+                        await onDeleteGroqKey();
+                        if (onRefresh) await onRefresh();
+                      }}
                       className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-medium rounded-xl border border-rose-200 transition"
                       title="Disconnect Key"
                     >
@@ -188,6 +215,10 @@ export default function ProfilePage({
                 )}
               </div>
 
+              {gmailMsg && (
+                <p className="text-[11px] text-emerald-600 font-medium">{gmailMsg}</p>
+              )}
+
               {credStatus?.gmail_connected ? (
                 <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/60 text-xs space-y-2">
                   <div className="font-medium text-zinc-800 flex items-center gap-1.5">
@@ -195,7 +226,10 @@ export default function ProfilePage({
                     Connected as <span className="font-semibold text-zinc-900">{credStatus.gmail_email}</span>
                   </div>
                   <button
-                    onClick={onDeleteGmail}
+                    onClick={async () => {
+                      await onDeleteGmail();
+                      if (onRefresh) await onRefresh();
+                    }}
                     className="w-full py-1 text-[11px] font-medium text-rose-600 hover:text-rose-700 transition"
                   >
                     Disconnect Gmail Account
@@ -207,11 +241,16 @@ export default function ProfilePage({
                     Connect Gmail to receive automatic email registration alerts & reply actions.
                   </p>
                   <button
-                    onClick={onStartGmailOAuth}
-                    className="w-full py-2 bg-zinc-900 hover:bg-black text-white text-xs font-medium rounded-xl transition flex items-center justify-center gap-2 shadow-xs"
+                    onClick={handleConnectGmail}
+                    disabled={gmailLoading}
+                    className="w-full py-2 bg-zinc-900 hover:bg-black disabled:opacity-50 text-white text-xs font-medium rounded-xl transition flex items-center justify-center gap-2 shadow-xs"
                   >
-                    <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                    Connect Gmail Account
+                    {gmailLoading ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                    )}
+                    {gmailLoading ? 'Connecting...' : 'Connect Gmail Account'}
                   </button>
                 </div>
               )}
@@ -230,15 +269,10 @@ export default function ProfilePage({
               <label className="border-2 border-dashed border-zinc-200 hover:border-indigo-400 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition bg-zinc-50/50">
                 <FileText className="w-8 h-8 text-zinc-400 mb-2" />
                 <span className="text-xs font-medium text-zinc-700">
-                  {selectedFile ? selectedFile.name : 'Click or drop PDF/DOCX here'}
+                  {selectedFile ? selectedFile.name : 'Drop resume file here or click to browse'}
                 </span>
                 <span className="text-[10px] text-zinc-400 mt-1">pdfplumber & python-docx extraction</span>
-                <input 
-                  type="file" 
-                  accept=".pdf,.docx,.doc" 
-                  onChange={handleFileChange} 
-                  className="hidden" 
-                />
+                <input type="file" accept=".pdf,.docx" onChange={handleFileChange} className="hidden" />
               </label>
 
               <button
@@ -247,12 +281,12 @@ export default function ProfilePage({
                 className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-xl transition flex items-center justify-center gap-2 shadow-xs"
               >
                 {uploading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                {uploading ? 'Parsing & Merging...' : 'Parse Resume & Update Profile'}
+                {uploading ? 'Parsing Resume...' : 'Parse Resume & Update Profile'}
               </button>
             </form>
           </div>
 
-          {/* GitHub Sync Box */}
+          {/* GitHub Sync Card */}
           <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-xs space-y-4">
             <div className="flex items-center gap-2 font-semibold text-sm text-zinc-900">
               <GitBranch className="w-4 h-4 text-indigo-600" />
@@ -262,7 +296,7 @@ export default function ProfilePage({
             <div className="space-y-3">
               <input
                 type="text"
-                placeholder="GitHub Username"
+                placeholder="GitHub Username (e.g. alexdev)"
                 value={githubInput}
                 onChange={(e) => setGithubInput(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -274,86 +308,87 @@ export default function ProfilePage({
                 className="w-full py-2 bg-zinc-900 hover:bg-black disabled:opacity-50 text-white text-xs font-medium rounded-xl transition flex items-center justify-center gap-2 shadow-xs"
               >
                 {syncing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                {syncing ? 'Syncing GitHub API...' : 'Fetch GitHub Skills'}
+                {syncing ? 'Syncing Repos...' : 'Fetch & Sync Public Repos'}
               </button>
             </div>
           </div>
 
         </div>
 
-        {/* Right 2 Columns: Profile Details */}
+        {/* Right 2 Columns: Candidate Details & Derived Skills */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* Candidate Info Overview */}
           <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg">
-                {profile?.full_name?.charAt(0) || 'C'}
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-zinc-900">{profile?.full_name || 'Candidate'}</h2>
-                <p className="text-xs text-zinc-500">{profile?.email || 'user@example.com'} • CGPA: {profile?.cgpa || '8.5'}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
-                <Award className="w-4 h-4 text-indigo-600" />
-                Derived Skills & Technologies
-              </h3>
-              <span className="text-xs text-zinc-400">{profile?.skills?.length || 0} skills identified</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2 pt-1">
-              {profile?.skills?.map((skill, idx) => (
-                <span
-                  key={idx}
-                  className="px-3 py-1 text-xs font-medium rounded-xl bg-zinc-100 text-zinc-800 border border-zinc-200 shadow-2xs"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-indigo-600" />
-              Featured Projects
-            </h3>
+              Candidate Information
+            </h2>
 
-            <div className="space-y-3">
-              {profile?.projects?.map((proj, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-zinc-50 border border-zinc-100 space-y-1">
-                  <div className="font-semibold text-xs text-zinc-900 flex items-center justify-between">
-                    <span>{proj.title}</span>
-                    {proj.tech && <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-zinc-200 text-zinc-600 font-mono">{proj.tech}</span>}
-                  </div>
-                  <p className="text-xs text-zinc-600 leading-relaxed">{proj.description}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
+                <div className="text-zinc-500 font-medium">Full Name</div>
+                <div className="text-sm font-semibold text-zinc-900 mt-0.5">{profile?.full_name || 'Not set'}</div>
+              </div>
+              <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
+                <div className="text-zinc-500 font-medium">Email Address</div>
+                <div className="text-sm font-semibold text-zinc-900 mt-0.5 truncate">{profile?.email || 'Not set'}</div>
+              </div>
+              <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
+                <div className="text-zinc-500 font-medium">CGPA / Grade</div>
+                <div className="text-sm font-semibold text-zinc-900 mt-0.5">{profile?.cgpa || '8.5 / 10'}</div>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-3">
-            <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
-              <GraduationCap className="w-4 h-4 text-indigo-600" />
-              Education Credentials
-            </h3>
-
-            <div className="space-y-2">
-              {profile?.education?.map((edu, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs p-3 rounded-xl bg-zinc-50 border border-zinc-100">
-                  <div>
-                    <div className="font-semibold text-zinc-900">{edu.institution}</div>
-                    <div className="text-zinc-500">{edu.degree}</div>
-                  </div>
-                  <div className="font-medium text-zinc-700">{edu.year}</div>
-                </div>
-              ))}
+          {/* Derived Skills Badge Cloud */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
+                <Award className="w-4 h-4 text-indigo-600" />
+                Derived Technical Skills ({profile?.skills?.length || 0})
+              </h2>
             </div>
+
+            {(!profile?.skills || profile.skills.length === 0) ? (
+              <p className="text-xs text-zinc-500 italic">No skills extracted yet. Upload your resume to extract skills.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {profile.skills.map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 text-xs font-semibold rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-2xs"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Synced GitHub Repositories */}
+          {profile?.github_repos && profile.github_repos.length > 0 && (
+            <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
+              <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-indigo-600" />
+                Synced GitHub Repositories ({profile.github_repos.length})
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {profile.github_repos.map((repo, idx) => (
+                  <div key={idx} className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                    <div className="font-semibold text-xs text-zinc-900">{repo.name}</div>
+                    <div className="text-[11px] text-zinc-500 truncate">{repo.description || 'No description'}</div>
+                    {repo.language && (
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-md bg-zinc-200 text-zinc-700">
+                        {repo.language}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 
