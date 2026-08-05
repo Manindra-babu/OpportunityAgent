@@ -37,10 +37,9 @@ def save_groq_key(
     if not key or key.startswith("•"):
         raise HTTPException(
             status_code=400,
-            detail="Please paste your actual Groq API key from console.groq.com/keys (starts with 'gsk_')."
+            detail="Please paste your actual Groq API key from console.groq.com/keys."
         )
 
-    # Clean and save key
     encrypted_key = encrypt_credential(key)
 
     cred = db.query(UserCredential).filter(UserCredential.user_id == current_user.id).first()
@@ -56,12 +55,12 @@ def save_groq_key(
         user_id=current_user.id,
         agent_name="Credentials",
         action="Groq API Key Connected",
-        details="Successfully validated and saved encrypted Groq API key."
+        details="Successfully saved encrypted Groq API key."
     )
     db.add(log)
     db.commit()
 
-    return {"status": "success", "groq_connected": True, "message": "Groq API Key validated and saved securely!"}
+    return {"status": "success", "groq_connected": True, "message": "Groq API Key saved securely!"}
 
 @router.delete("/groq")
 def delete_groq_key(
@@ -82,7 +81,6 @@ def gmail_oauth_start(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Connect user's email directly and return success
     cred = db.query(UserCredential).filter(UserCredential.user_id == current_user.id).first()
     if not cred:
         cred = UserCredential(user_id=current_user.id)
@@ -102,7 +100,6 @@ def gmail_oauth_start(
     db.add(log)
     db.commit()
 
-    # If Google OAuth Client ID exists, return OAuth consent URL
     if settings.GMAIL_CLIENT_ID:
         base_url = str(request.base_url).rstrip('/')
         redirect_uri = f"{base_url}/credentials/gmail/oauth/callback"
