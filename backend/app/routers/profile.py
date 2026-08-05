@@ -39,7 +39,7 @@ def get_profile(
 @router.post("/resume", response_model=ProfileOut)
 async def upload_resume(
     file: UploadFile = File(...),
-    github_username: Optional[str] = Form(None),
+    github_username: Optional[str] = Form(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

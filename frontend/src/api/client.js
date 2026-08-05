@@ -75,8 +75,9 @@ export const getProfile = async () => {
 };
 
 export const uploadResume = async (formData) => {
+  // Omit explicit Content-Type header so Axios generates correct boundary string for multipart/form-data
   const res = await api.post('/profile/resume', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   });
   return res.data;
 };
@@ -85,7 +86,7 @@ export const syncGithub = async (githubUsername) => {
   const formData = new FormData();
   formData.append('github_username', githubUsername);
   const res = await api.post('/profile/github', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   });
   return res.data;
 };
@@ -100,8 +101,18 @@ export const triggerDiscovery = async () => {
   return res.data;
 };
 
-export const manualAction = async (payload) => {
-  const res = await api.post('/opportunities/manual-action', payload);
+export const applyToOpportunity = async (oppId) => {
+  const res = await api.post(`/opportunities/${oppId}/apply`);
+  return res.data;
+};
+
+export const getInbox = async () => {
+  const res = await api.get('/inbox');
+  return res.data;
+};
+
+export const pollInboxNow = async () => {
+  const res = await api.post('/inbox/poll-now');
   return res.data;
 };
 
@@ -110,37 +121,14 @@ export const getNews = async () => {
   return res.data;
 };
 
-export const refreshNews = async () => {
-  const res = await api.post('/news/refresh');
+export const refreshNewsNow = async () => {
+  const res = await api.post('/news/refresh-now');
   return res.data;
 };
 
-export const getSettings = async () => {
-  const res = await api.get('/settings');
+export const getLogs = async () => {
+  const res = await api.get('/logs');
   return res.data;
 };
 
-export const updateThreshold = async (threshold) => {
-  const res = await api.post('/settings/threshold', { threshold });
-  return res.data;
-};
-
-export const getActivityLogs = async () => {
-  const res = await api.get('/activity');
-  return res.data;
-};
-
-export const getFailureMemory = async () => {
-  const res = await api.get('/activity/failure-memory');
-  return res.data;
-};
-
-export const getMetrics = async () => {
-  const res = await api.get('/activity/metrics');
-  return res.data;
-};
-
-export const submitUserFix = async (payload) => {
-  const res = await api.post('/activity/user-fix', payload);
-  return res.data;
-};
+export default api;
