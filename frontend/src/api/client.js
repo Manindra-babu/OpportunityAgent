@@ -106,6 +106,11 @@ export const applyToOpportunity = async (oppId) => {
   return res.data;
 };
 
+export const manualAction = async (payload) => {
+  const res = await api.post('/opportunities/manual-action', payload);
+  return res.data;
+};
+
 export const getInbox = async () => {
   const res = await api.get('/inbox');
   return res.data;
@@ -126,8 +131,37 @@ export const refreshNewsNow = async () => {
   return res.data;
 };
 
-export const getLogs = async () => {
+export const refreshNews = refreshNewsNow;
+
+export const getSettings = async () => {
+  const res = await api.get('/settings');
+  return res.data;
+};
+
+export const updateThreshold = async (threshold) => {
+  const res = await api.post('/settings/threshold', { threshold });
+  return res.data;
+};
+
+export const getActivityLogs = async () => {
   const res = await api.get('/logs');
+  return res.data;
+};
+
+export const getLogs = getActivityLogs;
+
+export const getFailureMemory = async () => {
+  const res = await api.get('/logs/failure-memory');
+  return res.data;
+};
+
+export const getMetrics = async () => {
+  const res = await api.get('/logs/metrics');
+  return res.data;
+};
+
+export const submitUserFix = async (payload) => {
+  const res = await api.post('/logs/user-fix', payload);
   return res.data;
 };
 
