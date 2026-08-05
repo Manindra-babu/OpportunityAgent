@@ -34,17 +34,17 @@ class AuthMessageResponse(BaseModel):
     user: UserResponse
 
 class ProfileBase(BaseModel):
-    skills: List[str] = []
-    projects: List[Dict[str, Any]] = []
-    education: List[Dict[str, Any]] = []
-    github_username: Optional[str] = None
-    github_repos: List[Dict[str, Any]] = []
-    resume_path: Optional[str] = None
-    primary_domain: str = "Full Stack Development"
-    cgpa: Optional[str] = None
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    skills: List[Any] = []
+    projects: List[Any] = []
+    education: List[Any] = []
+    github_username: Optional[Any] = None
+    github_repos: List[Any] = []
+    resume_path: Optional[Any] = None
+    primary_domain: Optional[Any] = "Full Stack Development"
+    cgpa: Optional[Any] = None
+    full_name: Optional[Any] = None
+    email: Optional[Any] = None
+    phone: Optional[Any] = None
 
 class ProfileCreate(ProfileBase):
     pass
@@ -61,20 +61,9 @@ class OpportunityScoreOut(BaseModel):
     opportunity_id: int
     score: float
     role_category: str
-    reason: str
-    eligible: bool
-    evaluated_at: datetime.datetime
-
-    class Config:
-        from_attributes = True
-
-class RegistrationOut(BaseModel):
-    id: int
-    opportunity_id: int
-    status: str
-    reply_at: Optional[datetime.datetime] = None
-    registered_at: Optional[datetime.datetime] = None
-    notes: Optional[str] = None
+    match_reasoning: str
+    fit_status: str
+    calculated_at: datetime.datetime
 
     class Config:
         from_attributes = True
@@ -88,63 +77,73 @@ class OpportunityOut(BaseModel):
     deadline: Optional[str] = None
     category: str
     discovered_at: datetime.datetime
-    score_rel: Optional[OpportunityScoreOut] = None
-    registration_rel: Optional[RegistrationOut] = None
+    user_score: Optional[OpportunityScoreOut] = None
 
     class Config:
         from_attributes = True
 
-class FailureMemoryOut(BaseModel):
+class OpportunityListResponse(BaseModel):
+    items: List[OpportunityOut]
+    total: int
+    high_match_count: int
+
+class ApplicationOut(BaseModel):
     id: int
-    domain: str
-    failure_type: str
-    description: str
-    resolution: str
-    created_at: datetime.datetime
+    opportunity_id: int
+    status: str
+    action_type: str
+    applied_at: datetime.datetime
 
     class Config:
         from_attributes = True
 
-class FieldMappingRuleOut(BaseModel):
+class InboxMessageOut(BaseModel):
     id: int
-    domain: Optional[str] = None
-    source_label: str
-    target_profile_field: str
-    transform: Optional[str] = None
-    created_at: datetime.datetime
+    sender: str
+    subject: str
+    snippet: str
+    full_body: str
+    extracted_deadline: Optional[str] = None
+    extracted_link: Optional[str] = None
+    is_action_required: bool
+    status: str
+    received_at: datetime.datetime
 
     class Config:
         from_attributes = True
 
-class NewsItemOut(BaseModel):
+class NewsArticleOut(BaseModel):
     id: int
-    title: str
     source: str
     url: str
-    published_at: Optional[str] = None
+    title: str
+    summary: str
+    published_at: datetime.datetime
 
     class Config:
         from_attributes = True
+
+class SettingsOut(BaseModel):
+    relevance_threshold: float
 
 class ActivityLogOut(BaseModel):
     id: int
     agent_name: str
     action: str
     details: str
-    timestamp: datetime.datetime
+    created_at: datetime.datetime
 
     class Config:
         from_attributes = True
 
-class ThresholdUpdate(BaseModel):
-    threshold: float
+class FailureMemoryOut(BaseModel):
+    id: int
+    source_url: str
+    error_type: str
+    error_details: str
+    resolution_status: str
+    user_fix_note: Optional[str] = None
+    created_at: datetime.datetime
 
-class ManualRegistrationRequest(BaseModel):
-    opportunity_id: int
-    action: str # "yes", "no", "skip", "register_now"
-
-class UserFixRequest(BaseModel):
-    opportunity_id: int
-    field_name: str
-    field_value: str
-    remember_rule: bool = True
+    class Config:
+        from_attributes = True
