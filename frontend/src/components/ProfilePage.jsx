@@ -26,7 +26,8 @@ export default function ProfilePage({
 
   // Gmail connection state
   const [gmailLoading, setGmailLoading] = useState(false);
-  const [gmailMsg, setGmailMsg] = useState('');
+  const [gmailError, setGmailError] = useState('');
+  const [gmailSuccessMsg, setGmailSuccessMsg] = useState('');
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -72,7 +73,7 @@ export default function ProfilePage({
       setGroqKeyInput('');
       if (onRefresh) await onRefresh();
     } catch (err) {
-      setGroqError(err.response?.data?.detail || 'Invalid Groq API Key format. Must start with "gsk_".');
+      setGroqError(err.response?.data?.detail || 'Invalid Groq API Key. Please enter your valid key starting with gsk_.');
     } finally {
       setValidatingGroq(false);
     }
@@ -80,17 +81,17 @@ export default function ProfilePage({
 
   const handleConnectGmail = async () => {
     setGmailLoading(true);
-    setGmailMsg('');
+    setGmailError('');
+    setGmailSuccessMsg('');
     try {
       const res = await onStartGmailOAuth();
+      setGmailSuccessMsg(res.message || 'Connected to Gmail account successfully!');
+      if (onRefresh) await onRefresh();
       if (res.redirect && res.url) {
         window.location.href = res.url;
-      } else {
-        setGmailMsg(res.message || 'Gmail connected!');
-        if (onRefresh) await onRefresh();
       }
     } catch (err) {
-      setGmailMsg('Failed to connect Gmail account.');
+      setGmailError(err.response?.data?.detail || 'Failed to connect Gmail account.');
     } finally {
       setGmailLoading(false);
     }
@@ -215,8 +216,11 @@ export default function ProfilePage({
                 )}
               </div>
 
-              {gmailMsg && (
-                <p className="text-[11px] text-emerald-600 font-medium">{gmailMsg}</p>
+              {gmailError && (
+                <p className="text-[11px] text-rose-600 font-medium">{gmailError}</p>
+              )}
+              {gmailSuccessMsg && (
+                <p className="text-[11px] text-emerald-600 font-medium">{gmailSuccessMsg}</p>
               )}
 
               {credStatus?.gmail_connected ? (
