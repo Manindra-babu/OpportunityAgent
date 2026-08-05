@@ -123,7 +123,7 @@ class InternshalaScraper(BaseScraper):
         results = [
             {
                 "source": self.name,
-                "url": "https://internshala.com/internship/detail/python-fastapi-backend-developer-internship-101",
+                "url": "https://internshala.com/internships",
                 "title": "Python & FastAPI Backend Intern",
                 "description": "Remote internship building scalable microservices, database schemas with SQLAlchemy, and LLM API integrations.",
                 "category": "Internship",
@@ -131,7 +131,7 @@ class InternshalaScraper(BaseScraper):
             },
             {
                 "source": self.name,
-                "url": "https://internshala.com/internship/detail/full-stack-ai-engineer-internship-202",
+                "url": "https://internshala.com/internships/matching",
                 "title": "Full Stack AI Engineer Intern",
                 "description": "Develop full-stack web applications with React, Vite, Python FastAPI, and Groq LLM pipelines.",
                 "category": "Internship",
@@ -147,7 +147,7 @@ class MicrosoftCareersScraper(BaseScraper):
         results = [
             {
                 "source": self.name,
-                "url": "https://careers.microsoft.com/students/us/en/job/170101/Software-Engineering-Intern-2026",
+                "url": "https://careers.microsoft.com/v2/global/en/students.html",
                 "title": "Microsoft Software Engineering Student Intern 2026",
                 "description": "Microsoft University Internship Program. Work on Azure Cloud Services, AI Copilot, and scalable distributed systems using Python, C#, and TypeScript.",
                 "category": "Internship",
@@ -155,7 +155,7 @@ class MicrosoftCareersScraper(BaseScraper):
             },
             {
                 "source": self.name,
-                "url": "https://careers.microsoft.com/students/us/en/job/170202/AI-Research-Intern-2026",
+                "url": "https://careers.microsoft.com/v2/global/en/home.html",
                 "title": "Microsoft AI Research & LLM Engineering Intern",
                 "description": "Join Microsoft Research AI labs. Build foundation model benchmarks, agentic workflows, and high-performance neural inference.",
                 "category": "Internship",
@@ -171,7 +171,7 @@ class GoogleCareersScraper(BaseScraper):
         results = [
             {
                 "source": self.name,
-                "url": "https://www.google.com/about/careers/applications/jobs/results/1098234-software-engineering-intern-2026",
+                "url": "https://buildyourfuture.withgoogle.com/internships",
                 "title": "Google STEP & Software Engineering Student Intern 2026",
                 "description": "Google Summer Student Internship Program. Collaborate with Google Cloud & DeepMind engineering teams building distributed Python & React systems.",
                 "category": "Internship",
@@ -179,7 +179,7 @@ class GoogleCareersScraper(BaseScraper):
             },
             {
                 "source": self.name,
-                "url": "https://www.google.com/about/careers/applications/jobs/results/1098555-cloud-ai-engineer-intern",
+                "url": "https://www.google.com/about/careers/applications/jobs/results/?q=intern",
                 "title": "Google Cloud AI Engineer Student Intern",
                 "description": "Design and deploy scalable AI agents, RESTful microservices, and modern frontend UIs on Google Cloud Platform.",
                 "category": "Internship",
@@ -195,7 +195,7 @@ class InfosysCareersScraper(BaseScraper):
         results = [
             {
                 "source": self.name,
-                "url": "https://www.infosys.com/careers/instep/internship-2026.html",
+                "url": "https://www.infosys.com/instep.html",
                 "title": "Infosys InStep Global Flagship Internship 2026",
                 "description": "Infosys prestigious international internship program. Work directly on AI solutions, full-stack microservices, and enterprise automation.",
                 "category": "Internship",
@@ -203,7 +203,7 @@ class InfosysCareersScraper(BaseScraper):
             },
             {
                 "source": self.name,
-                "url": "https://www.infosys.com/hackwithinfy-2026.html",
+                "url": "https://unstop.com/competitions/hackwithinfy-infosys",
                 "title": "Infosys HackWithInfy National Hackathon & Hiring Challenge",
                 "description": "Infosys flagship competitive coding and hackathon challenge for engineering students. Direct interview calls for high-performing coders.",
                 "category": "Hackathon",
@@ -221,7 +221,30 @@ SCRAPERS: List[BaseScraper] = [
     InfosysCareersScraper()
 ]
 
+# URL Migrations for updating broken legacy links in existing DB records
+URL_MIGRATIONS = {
+    "https://www.infosys.com/careers/instep/internship-2026.html": "https://www.infosys.com/instep.html",
+    "https://www.infosys.com/hackwithinfy-2026.html": "https://unstop.com/competitions/hackwithinfy-infosys",
+    "https://careers.microsoft.com/students/us/en/job/170101/Software-Engineering-Intern-2026": "https://careers.microsoft.com/v2/global/en/students.html",
+    "https://careers.microsoft.com/students/us/en/job/170202/AI-Research-Intern-2026": "https://careers.microsoft.com/v2/global/en/home.html",
+    "https://www.google.com/about/careers/applications/jobs/results/1098234-software-engineering-intern-2026": "https://buildyourfuture.withgoogle.com/internships",
+    "https://www.google.com/about/careers/applications/jobs/results/1098555-cloud-ai-engineer-intern": "https://www.google.com/about/careers/applications/jobs/results/?q=intern"
+}
+
+def fix_legacy_urls(db: Session):
+    for old_url, new_url in URL_MIGRATIONS.items():
+        existing_old = db.query(Opportunity).filter(Opportunity.url == old_url).first()
+        if existing_old:
+            existing_new = db.query(Opportunity).filter(Opportunity.url == new_url).first()
+            if existing_new:
+                db.delete(existing_old)
+            else:
+                existing_old.url = new_url
+    db.commit()
+
 async def run_discovery_pipeline(db: Session) -> List[Opportunity]:
+    fix_legacy_urls(db)
+
     discovered_items = []
     for scraper in SCRAPERS:
         try:
