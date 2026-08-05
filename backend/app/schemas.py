@@ -56,6 +56,12 @@ class ProfileOut(ProfileBase):
     class Config:
         from_attributes = True
 
+class ManualRegistrationRequest(BaseModel):
+    action: str = "register"
+
+class ThresholdUpdate(BaseModel):
+    threshold: float
+
 class OpportunityScoreOut(BaseModel):
     id: int
     opportunity_id: int
@@ -123,6 +129,8 @@ class NewsArticleOut(BaseModel):
     class Config:
         from_attributes = True
 
+NewsItemOut = NewsArticleOut
+
 class SettingsOut(BaseModel):
     relevance_threshold: float
 
@@ -147,3 +155,17 @@ class FailureMemoryOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class FieldMappingRuleOut(BaseModel):
+    id: int
+    field_name: str
+    mapped_value: str
+    confidence: float
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class UserFixRequest(BaseModel):
+    failure_id: int
+    user_note: str
