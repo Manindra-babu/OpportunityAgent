@@ -62,18 +62,26 @@ export default function ProfilePage({
 
   const handleSaveGroqKey = async (e) => {
     e.preventDefault();
-    if (!groqKeyInput.trim()) return;
+    const rawVal = groqKeyInput.trim();
+    if (!rawVal) return;
     setValidatingGroq(true);
     setGroqError('');
     setGroqSuccessMsg('');
 
     try {
-      const res = await onSaveGroqKey(groqKeyInput.trim());
-      setGroqSuccessMsg(res.message || 'Groq API Key validated and saved securely!');
+      const res = await onSaveGroqKey(rawVal);
+      setGroqSuccessMsg(res?.message || 'Groq API Key saved securely!');
       setGroqKeyInput('');
       if (onRefresh) await onRefresh();
     } catch (err) {
-      setGroqError(err.response?.data?.detail || 'Invalid Groq API Key. Please enter your valid key starting with gsk_.');
+      if (err.response?.status === 401) {
+        setGroqError('Session expired. Please log out and log in again to save your key.');
+      } else {
+        const detailMsg = typeof err.response?.data?.detail === 'string' 
+          ? err.response.data.detail 
+          : 'Failed to save Groq API key. Please check your key.';
+        setGroqError(detailMsg);
+      }
     } finally {
       setValidatingGroq(false);
     }
@@ -85,13 +93,20 @@ export default function ProfilePage({
     setGmailSuccessMsg('');
     try {
       const res = await onStartGmailOAuth();
-      setGmailSuccessMsg(res.message || 'Connected to Gmail account successfully!');
+      setGmailSuccessMsg(res?.message || 'Connected to Gmail account successfully!');
       if (onRefresh) await onRefresh();
-      if (res.redirect && res.url) {
+      if (res?.redirect && res?.url) {
         window.location.href = res.url;
       }
     } catch (err) {
-      setGmailError(err.response?.data?.detail || 'Failed to connect Gmail account.');
+      if (err.response?.status === 401) {
+        setGmailError('Session expired. Please log out and log in again.');
+      } else {
+        const detailMsg = typeof err.response?.data?.detail === 'string'
+          ? err.response.data.detail
+          : 'Failed to connect Gmail account.';
+        setGmailError(detailMsg);
+      }
     } finally {
       setGmailLoading(false);
     }
