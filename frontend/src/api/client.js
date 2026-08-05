@@ -9,10 +9,19 @@ const API_BASE = import.meta.env.VITE_API_BASE !== undefined
 const api = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
+
+// Attach JWT token from localStorage to every outgoing request
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export const requestOTP = async (email) => {
   const res = await api.post('/auth/request-otp', { email });
@@ -21,20 +30,30 @@ export const requestOTP = async (email) => {
 
 export const verifyOTPAndSignup = async (payload) => {
   const res = await api.post('/auth/verify-otp-signup', payload);
+  if (res.data?.token) {
+    localStorage.setItem('auth_token', res.data.token);
+  }
   return res.data;
 };
 
 export const signup = async (payload) => {
   const res = await api.post('/auth/signup', payload);
+  if (res.data?.token) {
+    localStorage.setItem('auth_token', res.data.token);
+  }
   return res.data;
 };
 
 export const login = async (payload) => {
   const res = await api.post('/auth/login', payload);
+  if (res.data?.token) {
+    localStorage.setItem('auth_token', res.data.token);
+  }
   return res.data;
 };
 
 export const logout = async () => {
+  localStorage.removeItem('auth_token');
   const res = await api.post('/auth/logout');
   return res.data;
 };
@@ -75,19 +94,15 @@ export const getProfile = async () => {
 };
 
 export const uploadResume = async (formData) => {
-  // Omit explicit Content-Type header so Axios generates correct boundary string for multipart/form-data
-  const res = await api.post('/profile/resume', formData, {
-    headers: { 'Content-Type': undefined },
-  });
+  // Let Axios auto-generate boundary string for multipart/form-data while attaching Bearer auth
+  const res = await api.post('/profile/resume', formData);
   return res.data;
 };
 
 export const syncGithub = async (githubUsername) => {
   const formData = new FormData();
   formData.append('github_username', githubUsername);
-  const res = await api.post('/profile/github', formData, {
-    headers: { 'Content-Type': undefined },
-  });
+  const res = await api.post('/profile/github', formData);
   return res.data;
 };
 
