@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import datetime
+import urllib.request
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from app.models import Opportunity, ActivityLog
@@ -12,6 +13,34 @@ def log_activity(db: Session, agent_name: str, action: str, details: str):
     log = ActivityLog(agent_name=agent_name, action=action, details=details)
     db.add(log)
     db.commit()
+
+async def is_link_live_and_valid(url: str) -> bool:
+    """
+    Dynamically navigates to URL via Playwright and checks if link is live (200 OK)
+    and not returning 404 / 'Page Not Found' errors.
+    """
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            response = await page.goto(url, timeout=10000, wait_until="domcontentloaded")
+            
+            if not response or response.status >= 400:
+                await browser.close()
+                return False
+
+            title = await page.title()
+            content = await page.content()
+            await browser.close()
+
+            lowered = (title + " " + content[:2000]).lower()
+            if "page not found" in lowered or "404" in lowered or "we are sorry" in lowered or "job expired" in lowered:
+                return False
+
+            return True
+    except Exception as e:
+        logger.warning(f"URL validation check failed for {url}: {e}")
+        return True  # Fallback to keep link if timeout occurs during check
 
 class BaseScraper:
     name: str = "Base"
