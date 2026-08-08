@@ -16,9 +16,12 @@ logger = logging.getLogger(__name__)
 
 COMMON_SKILLS_KEYWORDS = [
     "Python", "JavaScript", "TypeScript", "React", "Node.js", "FastAPI", "Django",
-    "Flask", "HTML", "CSS", "Tailwind", "SQL", "PostgreSQL", "MongoDB", "Docker",
-    "Kubernetes", "AWS", "GCP", "Git", "GitHub", "C++", "Java", "C#", "Go",
-    "Rust", "Playwright", "Selenium", "LLM", "Groq", "OpenAI", "PyTorch", "TensorFlow"
+    "Flask", "HTML", "HTML5", "CSS", "Tailwind", "SQL", "PostgreSQL", "MongoDB", "Docker",
+    "Kubernetes", "AWS", "GCP", "Git", "GitHub", "C++", "Java", "C#", "Go", "C",
+    "Rust", "Playwright", "Selenium", "LLM", "Groq", "OpenAI", "PyTorch", "TensorFlow",
+    "VS Code", "Power BI", "Microsoft Excel", "MERN", "Linux", "Operating Systems",
+    "Data Structures & Algorithms", "Pandas", "NumPy", "Scikit-Learn", "Matplotlib",
+    "Seaborn", "Jupyter", "Postman", "Figma", "Redux", "Express", "Next.js"
 ]
 
 def log_activity(db: Session, user_id: Optional[int], agent_name: str, action: str, details: str):
@@ -55,8 +58,8 @@ def parse_text_with_regex(raw_text: str) -> Dict[str, Any]:
     email = email_match.group(0) if email_match else "candidate@example.com"
 
     # Extract Phone
-    phone_match = re.search(r"(\+?\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}", raw_text)
-    phone = phone_match.group(0) if phone_match else ""
+    phone_match = re.search(r"(\+?\d{1,4}[\s\.-]?)?\(?\d{2,5}\)?[\s\.-]?\d{3,5}[\s\.-]?\d{3,5}", raw_text)
+    phone = phone_match.group(0).strip() if phone_match else ""
 
     # Extract CGPA
     cgpa_match = re.search(r"(cgpa|grade|gpa)[\s:]*([0-9]\.[0-9]+)", raw_text, re.IGNORECASE)
@@ -67,7 +70,7 @@ def parse_text_with_regex(raw_text: str) -> Dict[str, Any]:
     full_name = "Candidate"
     if lines:
         first_line = lines[0].replace("RESUME", "").replace("-", "").strip()
-        if len(first_line) > 2 and len(first_line) < 40:
+        if len(first_line) > 2 and len(first_line) < 50:
             full_name = first_line
 
     # Extract Skills matching keyword list
@@ -85,10 +88,10 @@ def parse_text_with_regex(raw_text: str) -> Dict[str, Any]:
         "email": email,
         "phone": phone,
         "cgpa": cgpa,
-        "primary_domain": "Full Stack Development",
+        "primary_domain": "Artificial Intelligence and Full Stack Engineering",
         "skills": list(set(found_skills)),
-        "projects": [{"title": "Software Application Project", "description": "Developed full-stack web application", "tech": ", ".join(found_skills[:3])}],
-        "education": [{"institution": "University / College", "degree": "Computer Science Engineering", "year": "2026"}]
+        "projects": [{"title": "AI & Software Application Project", "description": "Developed full-stack web and ML solutions", "tech": ", ".join(found_skills[:4])}],
+        "education": [{"institution": "Engineering College / University", "degree": "Computer Science Engineering", "year": "2026"}]
     }
 
 def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dict[str, Any]:
@@ -109,7 +112,7 @@ def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dic
         "You are an expert HR resume parser. Extract structured profile data from the raw resume text provided. "
         "Return a JSON object with keys: "
         "'full_name' (str), 'email' (str), 'phone' (str), 'cgpa' (str), 'primary_domain' (str), "
-        "'skills' (array of strings), "
+        "'skills' (array of strings including programming languages, frameworks, tools, software, databases), "
         "'projects' (array of objects with 'title', 'description', 'tech'), "
         "'education' (array of objects with 'institution', 'degree', 'year')."
     )
@@ -119,7 +122,6 @@ def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dic
         db, user_id, system_prompt, user_prompt, model="llama-3.3-70b-versatile", fallback_data=fallback
     )
 
-    # Ensure result contains valid parsed skills list
     if not isinstance(res, dict) or not res.get("skills"):
         return fallback
 

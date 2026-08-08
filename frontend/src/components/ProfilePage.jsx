@@ -1,5 +1,23 @@
 import React, { useState } from 'react';
-import { Upload, GitBranch, Briefcase, GraduationCap, Award, Key, Mail, Eye, EyeOff, CheckCircle2, AlertTriangle, RefreshCw, FileText, Trash2 } from 'lucide-react';
+import {
+  Key,
+  Mail,
+  Upload,
+  GitBranch,
+  Briefcase,
+  Award,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  FileText,
+  Eye,
+  EyeOff,
+  Phone,
+  Code,
+  FolderGit2,
+  GraduationCap
+} from 'lucide-react';
 
 export default function ProfilePage({
   profile,
@@ -12,19 +30,18 @@ export default function ProfilePage({
   onDeleteGmail,
   onRefresh
 }) {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [githubInput, setGithubInput] = useState(profile?.github_username || '');
-  const [uploading, setUploading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-
-  // Groq API key state
   const [groqKeyInput, setGroqKeyInput] = useState('');
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [validatingGroq, setValidatingGroq] = useState(false);
   const [groqError, setGroqError] = useState('');
   const [groqSuccessMsg, setGroqSuccessMsg] = useState('');
 
-  // Gmail connection state
+  const [githubInput, setGithubInput] = useState(profile?.github_username || '');
+  const [syncing, setSyncing] = useState(false);
+  
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
   const [gmailLoading, setGmailLoading] = useState(false);
   const [gmailError, setGmailError] = useState('');
   const [gmailSuccessMsg, setGmailSuccessMsg] = useState('');
@@ -44,9 +61,11 @@ export default function ProfilePage({
       formData.append('file', selectedFile);
       if (githubInput) formData.append('github_username', githubInput);
       await onUploadResume(formData);
-      setSelectedFile(null);
+    } catch (err) {
+      console.error('Resume upload error:', err);
     } finally {
       setUploading(false);
+      setSelectedFile(null);
     }
   };
 
@@ -55,6 +74,8 @@ export default function ProfilePage({
     setSyncing(true);
     try {
       await onSyncGithub(githubInput);
+    } catch (err) {
+      console.error('GitHub sync error:', err);
     } finally {
       setSyncing(false);
     }
@@ -62,26 +83,22 @@ export default function ProfilePage({
 
   const handleSaveGroqKey = async (e) => {
     e.preventDefault();
-    const rawVal = groqKeyInput.trim();
-    if (!rawVal) return;
+    if (!groqKeyInput.trim()) return;
+
     setValidatingGroq(true);
     setGroqError('');
     setGroqSuccessMsg('');
 
     try {
-      const res = await onSaveGroqKey(rawVal);
-      setGroqSuccessMsg(res?.message || 'Groq API Key saved securely!');
+      await onSaveGroqKey(groqKeyInput.trim());
+      setGroqSuccessMsg('Groq API Key validated and saved securely!');
       setGroqKeyInput('');
       if (onRefresh) await onRefresh();
     } catch (err) {
-      if (err.response?.status === 401) {
-        setGroqError('Session expired. Please log out and log in again to save your key.');
-      } else {
-        const detailMsg = typeof err.response?.data?.detail === 'string' 
-          ? err.response.data.detail 
-          : 'Failed to save Groq API key. Please check your key.';
-        setGroqError(detailMsg);
-      }
+      const detailMsg = typeof err.response?.data?.detail === 'string'
+        ? err.response.data.detail
+        : 'Failed to validate Groq API key. Check key format.';
+      setGroqError(detailMsg);
     } finally {
       setValidatingGroq(false);
     }
@@ -91,12 +108,10 @@ export default function ProfilePage({
     setGmailLoading(true);
     setGmailError('');
     setGmailSuccessMsg('');
+
     try {
-      const res = await onStartGmailOAuth();
-      setGmailSuccessMsg(res?.message || 'Connected to Gmail account successfully!');
-      if (onRefresh) await onRefresh();
-      if (res?.redirect && res?.url) {
-        window.location.href = res.url;
+      if (onStartGmailOAuth) {
+        await onStartGmailOAuth();
       }
     } catch (err) {
       if (err.response?.status === 401) {
@@ -112,6 +127,12 @@ export default function ProfilePage({
     }
   };
 
+  // Categorize Skills vs Tools
+  const TOOL_KEYWORDS = ['VS Code', 'Power BI', 'Microsoft Excel', 'Git', 'GitHub', 'Linux', 'Docker', 'Kubernetes', 'Postman', 'Figma', 'Jupyter'];
+  const allSkills = profile?.skills || [];
+  const extractedTools = allSkills.filter(s => TOOL_KEYWORDS.includes(s));
+  const coreTechnicalSkills = allSkills.filter(s => !TOOL_KEYWORDS.includes(s));
+
   return (
     <div className="space-y-6">
       
@@ -120,7 +141,7 @@ export default function ProfilePage({
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 tracking-tight">Master Candidate Profile</h1>
           <p className="text-xs text-zinc-500 mt-1">
-            Manage your derived skills, resume parsing, and BYOK platform API connections.
+            Manage your derived technical skills, parsed resume details, tools, and BYOK credentials.
           </p>
         </div>
 
@@ -337,43 +358,83 @@ export default function ProfilePage({
         {/* Right 2 Columns: Candidate Details & Derived Skills */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Candidate Info Overview */}
+          {/* Candidate Info Overview (4 Cards: Name, Email, Phone, CGPA) */}
           <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
             <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-indigo-600" />
-              Candidate Information
+              Candidate Information & Contact Details
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
               <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
-                <div className="text-zinc-500 font-medium">Full Name</div>
-                <div className="text-sm font-semibold text-zinc-900 mt-0.5">{profile?.full_name || 'Not set'}</div>
+                <div className="text-zinc-500 font-medium flex items-center gap-1">
+                  Full Name
+                </div>
+                <div className="text-xs font-semibold text-zinc-900 mt-1 truncate">{profile?.full_name || 'Not set'}</div>
               </div>
+              
               <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
-                <div className="text-zinc-500 font-medium">Email Address</div>
-                <div className="text-sm font-semibold text-zinc-900 mt-0.5 truncate">{profile?.email || 'Not set'}</div>
+                <div className="text-zinc-500 font-medium flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-indigo-500" /> Email Address
+                </div>
+                <div className="text-xs font-semibold text-zinc-900 mt-1 truncate">{profile?.email || 'Not set'}</div>
               </div>
+
               <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
-                <div className="text-zinc-500 font-medium">CGPA / Grade</div>
-                <div className="text-sm font-semibold text-zinc-900 mt-0.5">{profile?.cgpa || '8.5 / 10'}</div>
+                <div className="text-zinc-500 font-medium flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-emerald-500" /> Phone Number
+                </div>
+                <div className="text-xs font-semibold text-zinc-900 mt-1">{profile?.phone || '+91 Candidate Contact'}</div>
+              </div>
+
+              <div className="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200/60">
+                <div className="text-zinc-500 font-medium flex items-center gap-1">
+                  CGPA / Grade
+                </div>
+                <div className="text-xs font-semibold text-zinc-900 mt-1">{profile?.cgpa || '8.44 / 10'}</div>
               </div>
             </div>
           </div>
 
-          {/* Derived Skills Badge Cloud */}
+          {/* Tools, Software & Technologies */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
+                <Code className="w-4 h-4 text-indigo-600" />
+                Tools, Software & Environment ({extractedTools.length})
+              </h2>
+            </div>
+
+            {extractedTools.length === 0 ? (
+              <p className="text-xs text-zinc-500 italic">Upload resume to extract tools (e.g. VS Code, Power BI, Excel, Git, Linux, Docker).</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {extractedTools.map((tool, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 text-xs font-semibold rounded-xl bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs"
+                  >
+                    ⚡ {tool}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Derived Technical Skills Badge Cloud */}
           <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
                 <Award className="w-4 h-4 text-indigo-600" />
-                Derived Technical Skills ({profile?.skills?.length || 0})
+                Derived Technical & Programming Skills ({coreTechnicalSkills.length})
               </h2>
             </div>
 
-            {(!profile?.skills || profile.skills.length === 0) ? (
+            {coreTechnicalSkills.length === 0 ? (
               <p className="text-xs text-zinc-500 italic">No skills extracted yet. Upload your resume to extract skills.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {profile.skills.map((skill, idx) => (
+                {coreTechnicalSkills.map((skill, idx) => (
                   <span
                     key={idx}
                     className="px-3 py-1 text-xs font-semibold rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-2xs"
@@ -384,6 +445,50 @@ export default function ProfilePage({
               </div>
             )}
           </div>
+
+          {/* Resume Projects Extracted */}
+          {profile?.projects && profile.projects.length > 0 && (
+            <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
+              <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
+                <FolderGit2 className="w-4 h-4 text-indigo-600" />
+                Resume Projects ({profile.projects.length})
+              </h2>
+
+              <div className="space-y-3">
+                {profile.projects.map((proj, idx) => (
+                  <div key={idx} className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1.5">
+                    <div className="font-semibold text-sm text-zinc-900">{proj.title}</div>
+                    <div className="text-xs text-zinc-600">{proj.description}</div>
+                    {proj.tech && (
+                      <span className="inline-block mt-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-indigo-100 text-indigo-800">
+                        Tech: {proj.tech}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Education & Degree Extracted */}
+          {profile?.education && profile.education.length > 0 && (
+            <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
+              <h2 className="text-base font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-indigo-600" />
+                Education & Degree ({profile.education.length})
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {profile.education.map((edu, idx) => (
+                  <div key={idx} className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                    <div className="font-semibold text-xs text-zinc-900">{edu.institution}</div>
+                    <div className="text-[11px] text-zinc-600">{edu.degree}</div>
+                    <div className="text-[10px] text-zinc-400">Year: {edu.year}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Synced GitHub Repositories */}
           {profile?.github_repos && profile.github_repos.length > 0 && (
