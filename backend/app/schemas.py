@@ -118,18 +118,18 @@ class InboxMessageOut(BaseModel):
     class Config:
         from_attributes = True
 
-class NewsArticleOut(BaseModel):
+class NewsItemOut(BaseModel):
     id: int
     source: str
     url: str
     title: str
-    summary: str
-    published_at: datetime.datetime
+    published_at: Optional[Any] = None
+    summary: Optional[Any] = "Industry news and tech update."
 
     class Config:
         from_attributes = True
 
-NewsItemOut = NewsArticleOut
+NewsArticleOut = NewsItemOut
 
 class SettingsOut(BaseModel):
     relevance_threshold: float
