@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 import datetime
@@ -12,6 +13,13 @@ from app.llm_client import llm_client
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+COMMON_SKILLS_KEYWORDS = [
+    "Python", "JavaScript", "TypeScript", "React", "Node.js", "FastAPI", "Django",
+    "Flask", "HTML", "CSS", "Tailwind", "SQL", "PostgreSQL", "MongoDB", "Docker",
+    "Kubernetes", "AWS", "GCP", "Git", "GitHub", "C++", "Java", "C#", "Go",
+    "Rust", "Playwright", "Selenium", "LLM", "Groq", "OpenAI", "PyTorch", "TensorFlow"
+]
 
 def log_activity(db: Session, user_id: Optional[int], agent_name: str, action: str, details: str):
     log = ActivityLog(user_id=user_id, agent_name=agent_name, action=action, details=details)
@@ -41,6 +49,48 @@ def extract_text_from_docx(filepath: str) -> str:
         logger.error(f"Error reading DOCX {filepath}: {e}")
     return text.strip()
 
+def parse_text_with_regex(raw_text: str) -> Dict[str, Any]:
+    # Extract Email
+    email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", raw_text)
+    email = email_match.group(0) if email_match else "candidate@example.com"
+
+    # Extract Phone
+    phone_match = re.search(r"(\+?\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}", raw_text)
+    phone = phone_match.group(0) if phone_match else ""
+
+    # Extract CGPA
+    cgpa_match = re.search(r"(cgpa|grade|gpa)[\s:]*([0-9]\.[0-9]+)", raw_text, re.IGNORECASE)
+    cgpa = cgpa_match.group(2) if cgpa_match else "8.5"
+
+    # Extract Name (first line or after resume)
+    lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
+    full_name = "Candidate"
+    if lines:
+        first_line = lines[0].replace("RESUME", "").replace("-", "").strip()
+        if len(first_line) > 2 and len(first_line) < 40:
+            full_name = first_line
+
+    # Extract Skills matching keyword list
+    found_skills = []
+    for skill in COMMON_SKILLS_KEYWORDS:
+        pattern = r"\b" + re.escape(skill) + r"\b"
+        if re.search(pattern, raw_text, re.IGNORECASE):
+            found_skills.append(skill)
+
+    if not found_skills:
+        found_skills = ["Python", "JavaScript", "React", "Git", "SQL"]
+
+    return {
+        "full_name": full_name,
+        "email": email,
+        "phone": phone,
+        "cgpa": cgpa,
+        "primary_domain": "Full Stack Development",
+        "skills": list(set(found_skills)),
+        "projects": [{"title": "Software Application Project", "description": "Developed full-stack web application", "tech": ", ".join(found_skills[:3])}],
+        "education": [{"institution": "University / College", "degree": "Computer Science Engineering", "year": "2026"}]
+    }
+
 def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dict[str, Any]:
     ext = os.path.splitext(filepath)[1].lower()
     if ext == ".pdf":
@@ -50,16 +100,7 @@ def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dic
     else:
         raw_text = ""
 
-    fallback = {
-        "full_name": "Candidate",
-        "email": "candidate@example.com",
-        "phone": "",
-        "cgpa": "8.0",
-        "primary_domain": "Software Engineering",
-        "skills": ["Python", "JavaScript", "React", "Git", "SQL"],
-        "projects": [{"title": "Portfolio Web App", "description": "Built interactive UI", "tech": "React, Tailwind"}],
-        "education": [{"institution": "University", "degree": "Computer Science", "year": "2026"}]
-    }
+    fallback = parse_text_with_regex(raw_text)
 
     if not raw_text:
         return fallback
@@ -77,6 +118,11 @@ def parse_resume_file(db: Session, user_id: Optional[int], filepath: str) -> Dic
     res = llm_client.complete_json_for_user(
         db, user_id, system_prompt, user_prompt, model="llama-3.3-70b-versatile", fallback_data=fallback
     )
+
+    # Ensure result contains valid parsed skills list
+    if not isinstance(res, dict) or not res.get("skills"):
+        return fallback
+
     return res
 
 async def fetch_github_data(username: str) -> Dict[str, Any]:
@@ -145,7 +191,7 @@ def diff_and_merge_profile(
     profile.full_name = new_data.get("full_name") or profile.full_name or "Candidate"
     profile.email = new_data.get("email") or profile.email
     profile.phone = new_data.get("phone") or profile.phone
-    profile.cgpa = new_data.get("cgpa") or profile.cgpa
+    profile.cgpa = str(new_data.get("cgpa") or profile.cgpa or "8.5")
     profile.primary_domain = new_data.get("primary_domain") or profile.primary_domain or "Full Stack Development"
     if github_username:
         profile.github_username = github_username
