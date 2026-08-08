@@ -153,16 +153,25 @@ export default function App() {
     await loadUserData();
   };
 
-  const handleUploadResume = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    await uploadResume(formData);
+  const handleUploadResume = async (fileOrFormData) => {
+    let formData = fileOrFormData;
+    if (!(fileOrFormData instanceof FormData)) {
+      formData = new FormData();
+      formData.append('file', fileOrFormData);
+    }
+    const res = await uploadResume(formData);
     await loadUserData();
+    return res;
   };
 
-  const handleSyncGithub = async (username) => {
-    await syncGithub(username);
+  const handleSyncGithub = async (usernameOrFormData) => {
+    let username = usernameOrFormData;
+    if (usernameOrFormData instanceof FormData) {
+      username = usernameOrFormData.get('github_username') || '';
+    }
+    const res = await syncGithub(username);
     await loadUserData();
+    return res;
   };
 
   const handleTriggerDiscovery = async () => {
@@ -190,106 +199,96 @@ export default function App() {
     }
   };
 
-  const handleUpdateThreshold = async (val) => {
-    await updateThreshold(val);
+  const handleUpdateThreshold = async (threshold) => {
+    await updateThreshold(threshold);
     await loadUserData();
   };
 
-  const handleSubmitFix = async (oppId, fieldName, fieldValue, rememberRule) => {
-    await submitUserFix({
-      opportunity_id: oppId,
-      field_name: fieldName,
-      field_value: fieldValue,
-      remember_rule: rememberRule
-    });
+  const handleSubmitUserFix = async (payload) => {
+    await submitUserFix(payload);
     await loadUserData();
   };
 
   if (authChecking) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          Authenticating candidate session...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex flex-col font-sans">
-      
-      {/* Auth Modal if Not Logged In */}
-      {!currentUser && (
-        <AuthModal onLogin={handleLogin} onSignup={handleSignup} onSuccessAuth={handleSuccessAuth} />
-      )}
+    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 flex flex-col">
+      {/* Header Bar */}
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+      />
 
-      {/* Header */}
-      {currentUser && (
-        <Header
-          currentUser={currentUser}
-          credStatus={credStatus}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          onRefresh={loadUserData}
-          onLogout={handleLogout}
+      {/* Main App Canvas */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8">
+        {activeTab === 'feed' && (
+          <FeedPage
+            opportunities={opportunities}
+            loading={oppLoading}
+            onTriggerDiscovery={handleTriggerDiscovery}
+            onManualAction={handleManualAction}
+          />
+        )}
+
+        {activeTab === 'profile' && (
+          <ProfilePage
+            profile={profile}
+            credStatus={credStatus}
+            onUploadResume={handleUploadResume}
+            onSyncGithub={handleSyncGithub}
+            onSaveGroqKey={handleSaveGroqKey}
+            onDeleteGroqKey={handleDeleteGroqKey}
+            onStartGmailOAuth={handleStartGmailOAuth}
+            onDeleteGmail={handleDeleteGmail}
+            onRefresh={loadUserData}
+          />
+        )}
+
+        {activeTab === 'news' && (
+          <NewsPage
+            news={news}
+            loading={newsLoading}
+            onRefreshNews={handleRefreshNews}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsPage
+            settings={settings}
+            onUpdateThreshold={handleUpdateThreshold}
+          />
+        )}
+
+        {activeTab === 'activity' && (
+          <ActivityPage
+            logs={logs}
+            failureMemory={failureMemory}
+            rules={rules}
+            metrics={metrics}
+            onSubmitUserFix={handleSubmitUserFix}
+          />
+        )}
+      </main>
+
+      {/* Auth Modal overlay if logged out */}
+      {!currentUser && (
+        <AuthModal
+          onLogin={handleLogin}
+          onSignup={handleSignup}
+          onSuccessAuth={handleSuccessAuth}
         />
       )}
-
-      {/* Main Content Area */}
-      {currentUser && (
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-          {activeTab === 'feed' && (
-            <FeedPage
-              opportunities={opportunities}
-              threshold={settings.relevance_threshold || 70}
-              onTriggerDiscovery={handleTriggerDiscovery}
-              onManualAction={handleManualAction}
-              loading={oppLoading}
-            />
-          )}
-
-          {activeTab === 'profile' && (
-            <ProfilePage
-              profile={profile}
-              credStatus={credStatus}
-              onUploadResume={handleUploadResume}
-              onSyncGithub={handleSyncGithub}
-              onSaveGroqKey={handleSaveGroqKey}
-              onDeleteGroqKey={handleDeleteGroqKey}
-              onStartGmailOAuth={handleStartGmailOAuth}
-              onDeleteGmail={handleDeleteGmail}
-            />
-          )}
-
-          {activeTab === 'news' && (
-            <NewsPage
-              news={news}
-              onRefresh={handleRefreshNews}
-              loading={newsLoading}
-            />
-          )}
-
-          {activeTab === 'activity' && (
-            <ActivityPage
-              logs={logs}
-              failureMemory={failureMemory}
-              rules={rules}
-              metrics={metrics}
-              onSubmitFix={handleSubmitFix}
-            />
-          )}
-
-          {activeTab === 'settings' && (
-            <SettingsPage
-              settings={settings}
-              gmailStatus={credStatus}
-              onUpdateThreshold={handleUpdateThreshold}
-            />
-          )}
-        </main>
-      )}
-
-      <footer className="bg-white border-t border-zinc-200 py-4 text-center text-xs text-zinc-400">
-        OpportunityAgent — Multi-User BYOK Internship & Hackathon Engine • Strict Light SaaS Aesthetic
-      </footer>
     </div>
   );
 }
