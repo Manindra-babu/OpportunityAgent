@@ -51,16 +51,21 @@ if os.path.exists(FRONTEND_DIST_DIR):
 
     @app.get("/")
     def serve_frontend_index():
-        return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
+        response = FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     @app.get("/{full_path:path}")
     def serve_frontend_spa(full_path: str):
-        # Allow API routes to be handled by routers
         if full_path.startswith(("auth", "credentials", "profile", "opportunities", "news", "settings", "gmail", "activity", "docs", "openapi.json")):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
         index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
         if os.path.exists(index_file):
-            return FileResponse(index_file)
+            response = FileResponse(index_file)
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return response
         return JSONResponse({"detail": "Not Found"}, status_code=404)
 else:
     @app.get("/")
@@ -78,6 +83,26 @@ async def startup_event():
 
     db = SessionLocal()
     try:
+        from app.models import User, Profile, UserCredential
+        from app.security.auth import hash_password
+
+        # Seed default test candidate account so login works out of the box
+        default_email = "manindra@example.com"
+        test_user = db.query(User).filter(User.email == default_email).first()
+        if not test_user:
+            hashed = hash_password("password123")
+            test_user = User(email=default_email, password_hash=hashed)
+            db.add(test_user)
+            db.commit()
+            db.refresh(test_user)
+
+            profile = Profile(user_id=test_user.id, email=default_email, full_name="Manindra")
+            cred = UserCredential(user_id=test_user.id)
+            db.add(profile)
+            db.add(cred)
+            db.commit()
+            logger.info(f"Seeded default test user: {default_email} / password123")
+
         fetch_rss_news(db)
         from app.models import Opportunity
         if db.query(Opportunity).count() == 0:
