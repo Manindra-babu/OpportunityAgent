@@ -94,15 +94,15 @@ export const getProfile = async () => {
 };
 
 export const uploadResume = async (formData) => {
-  // Let Axios auto-generate boundary string for multipart/form-data while attaching Bearer auth
-  const res = await api.post('/profile/resume', formData);
+  // Use Axios native postForm method for 100% crash-proof multipart/form-data uploads
+  const res = await api.postForm('/profile/resume', formData);
   return res.data;
 };
 
 export const syncGithub = async (githubUsername) => {
   const formData = new FormData();
   formData.append('github_username', githubUsername);
-  const res = await api.post('/profile/github', formData);
+  const res = await api.postForm('/profile/github', formData);
   return res.data;
 };
 
