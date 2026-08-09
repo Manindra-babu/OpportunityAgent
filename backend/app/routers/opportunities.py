@@ -47,6 +47,9 @@ def list_opportunities(
             if current_status != status:
                 continue
 
+        text_content = f"{opp.title or ''} {opp.description or ''} {opp.deadline or ''}".lower()
+        is_upcoming = getattr(opp, "is_upcoming", False) or (opp.category == "Upcoming Event") or any(k in text_content for k in ["upcoming", "starts on", "begins", "registration opens", "starts in", "yet to start", "starts:"])
+
         results.append({
             "id": opp.id,
             "source": opp.source,
@@ -54,6 +57,8 @@ def list_opportunities(
             "title": opp.title,
             "description": opp.description,
             "deadline": opp.deadline,
+            "start_date": getattr(opp, "start_date", None),
+            "is_upcoming": is_upcoming,
             "category": opp.category,
             "discovered_at": opp.discovered_at,
             "user_score": score_rec,

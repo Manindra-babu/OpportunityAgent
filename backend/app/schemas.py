@@ -85,6 +85,8 @@ class OpportunityOut(BaseModel):
     title: str
     description: str
     deadline: Optional[str] = None
+    start_date: Optional[str] = None
+    is_upcoming: Optional[bool] = False
     category: str
     discovered_at: datetime.datetime
     user_score: Optional[OpportunityScoreOut] = None

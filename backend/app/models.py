@@ -67,6 +67,8 @@ class Opportunity(Base):
     title = Column(String, index=True)
     description = Column(Text)
     deadline = Column(String, nullable=True)
+    start_date = Column(String, nullable=True)
+    is_upcoming = Column(Boolean, default=False)
     category = Column(String, default="Internship")
     discovered_at = Column(DateTime, default=datetime.datetime.utcnow)
 

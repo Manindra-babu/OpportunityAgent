@@ -241,13 +241,51 @@ class InfosysCareersScraper(BaseScraper):
         ]
         return results
 
+class UpcomingEventsScraper(BaseScraper):
+    name: str = "Upcoming Events & Summits"
+
+    async def scrape(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "source": "Devfolio",
+                "url": "https://global-ai-hackathon-2026.devfolio.co",
+                "title": "Upcoming: Global AI Builders & Agentic Hackathon 2026",
+                "description": "Upcoming international hackathon. Event starts on September 15, 2026. Pre-registration is open for agentic workflow developers.",
+                "category": "Upcoming Event",
+                "start_date": "2026-09-15",
+                "deadline": "2026-09-10",
+                "is_upcoming": True
+            },
+            {
+                "source": "Unstop",
+                "url": "https://unstop.com/hackathons/national-coding-league-upcoming-2026",
+                "title": "Upcoming: National AI & Coding Championship 2026",
+                "description": "Upcoming flagship competitive programming event for computer science undergraduates. Starts October 1, 2026.",
+                "category": "Upcoming Event",
+                "start_date": "2026-10-01",
+                "deadline": "2026-09-25",
+                "is_upcoming": True
+            },
+            {
+                "source": "Google Careers",
+                "url": "https://buildyourfuture.withgoogle.com/events/upcoming-summit-2026",
+                "title": "Upcoming: Google Tech Student Summit & Hackathon 2026",
+                "description": "Upcoming student summit hosted by Google DeepMind & Google Cloud. Event starts September 20, 2026.",
+                "category": "Upcoming Event",
+                "start_date": "2026-09-20",
+                "deadline": "2026-09-18",
+                "is_upcoming": True
+            }
+        ]
+
 SCRAPERS: List[BaseScraper] = [
     DevfolioScraper(),
     UnstopScraper(),
     InternshalaScraper(),
     MicrosoftCareersScraper(),
     GoogleCareersScraper(),
-    InfosysCareersScraper()
+    InfosysCareersScraper(),
+    UpcomingEventsScraper()
 ]
 
 # URL Migrations for updating broken legacy links in existing DB records
@@ -286,6 +324,11 @@ async def run_discovery_pipeline(db: Session) -> List[Opportunity]:
     for item in discovered_items:
         existing = db.query(Opportunity).filter(Opportunity.url == item["url"]).first()
         if not existing:
+            is_upcoming = item.get("is_upcoming", False) or item.get("category") == "Upcoming Event"
+            text_str = f"{item['title']} {item['description']} {item.get('deadline', '')}".lower()
+            if any(k in text_str for k in ["upcoming", "starts on", "begins", "registration opens", "starts in", "yet to start", "starts:"]):
+                is_upcoming = True
+
             opp = Opportunity(
                 source=item["source"],
                 url=item["url"],
@@ -293,6 +336,8 @@ async def run_discovery_pipeline(db: Session) -> List[Opportunity]:
                 description=item["description"],
                 category=item.get("category", "Internship"),
                 deadline=item.get("deadline", "Open"),
+                start_date=item.get("start_date", None),
+                is_upcoming=is_upcoming,
                 discovered_at=datetime.datetime.utcnow()
             )
             db.add(opp)
