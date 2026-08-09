@@ -9,6 +9,11 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
   const [submittingFix, setSubmittingFix] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState(new Set());
 
+  // Ensure props are guaranteed arrays to prevent React render crash
+  const safeLogs = Array.isArray(logs) ? logs : (Array.isArray(logs?.items) ? logs.items : []);
+  const safeFailureMemory = Array.isArray(failureMemory) ? failureMemory : (Array.isArray(failureMemory?.items) ? failureMemory.items : []);
+  const safeRules = Array.isArray(rules) ? rules : (Array.isArray(rules?.items) ? rules.items : []);
+
   const toggleLogExpand = (id) => {
     setExpandedLogIds((prev) => {
       const next = new Set(prev);
@@ -142,14 +147,14 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
                 <Brain className="w-4 h-4 text-indigo-600" />
                 Failure Memory Store (Known Site Quirks)
               </h2>
-              <span className="text-xs text-zinc-400">{failureMemory?.length || 0} site rules</span>
+              <span className="text-xs text-zinc-400">{safeFailureMemory.length} site rules</span>
             </div>
 
             <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {failureMemory?.length === 0 ? (
+              {safeFailureMemory.length === 0 ? (
                 <p className="text-xs text-zinc-500 italic p-4 text-center">No registration failures recorded yet.</p>
               ) : (
-                failureMemory?.map((mem) => (
+                safeFailureMemory.map((mem) => (
                   <div key={mem.id} className="p-4 rounded-xl bg-zinc-50 border border-zinc-100 space-y-2 text-xs">
                     <div className="flex items-center justify-between font-semibold">
                       <span className="text-zinc-900">{mem.domain}</span>
@@ -180,10 +185,10 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
           <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
             <h2 className="text-sm font-semibold text-zinc-900">Learned Field-Mapping Rules</h2>
             <div className="space-y-2">
-              {rules?.length === 0 ? (
+              {safeRules.length === 0 ? (
                 <p className="text-xs text-zinc-400 italic">No custom rules added yet. System using default mapping.</p>
               ) : (
-                rules?.map((rule) => (
+                safeRules.map((rule) => (
                   <div key={rule.id} className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 border border-zinc-100 text-xs">
                     <div>
                       <span className="font-mono text-indigo-600 font-medium">{rule.source_label}</span>
@@ -210,10 +215,10 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
           </div>
 
           <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
-            {logs?.length === 0 ? (
+            {safeLogs.length === 0 ? (
               <p className="text-xs text-zinc-400 italic p-6 text-center">No execution logs recorded yet.</p>
             ) : (
-              logs?.map((log) => {
+              safeLogs.map((log) => {
                 const isExpanded = expandedLogIds.has(log.id);
 
                 return (
@@ -250,19 +255,13 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
                       </div>
                     </div>
 
-                    {/* Expanded Details Body */}
+                    {/* Expanded Detail Body */}
                     {isExpanded && (
-                      <div className="p-4 border-t border-zinc-100 bg-white text-xs space-y-2">
-                        <div className="font-semibold text-zinc-700 text-[11px] uppercase tracking-wider">
-                          Execution Details & Log Output
-                        </div>
-                        <p className="text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-lg border border-zinc-100 font-mono text-[11px]">
+                      <div className="p-4 border-t border-zinc-100 bg-zinc-50/30 space-y-2 text-xs">
+                        <div className="font-medium text-zinc-700">Action Details:</div>
+                        <p className="text-zinc-600 font-mono text-[11px] leading-relaxed whitespace-pre-wrap bg-white p-3 rounded-lg border border-zinc-200/60">
                           {log.details}
                         </p>
-                        <div className="text-[10px] text-zinc-400 flex items-center justify-between pt-1">
-                          <span>Timestamp: {new Date(log.timestamp).toLocaleString()}</span>
-                          <span>Agent: {log.agent_name}</span>
-                        </div>
                       </div>
                     )}
                   </div>
@@ -273,72 +272,6 @@ export default function ActivityPage({ logs, failureMemory, rules, metrics, onSu
         </div>
 
       </div>
-
-      {/* User Fix Modal */}
-      {selectedFailure && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 max-w-md w-full shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-zinc-900">Apply Form Field Fix</h3>
-              <button 
-                onClick={() => setSelectedFailure(null)} 
-                className="text-zinc-400 hover:text-zinc-600 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-600">
-              Provide corrected input value for <span className="font-semibold text-indigo-600">{selectedFailure.domain}</span>. This fix will be persisted in Failure Memory and applied to future registrations.
-            </p>
-
-            <form onSubmit={handleFixSubmit} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-semibold text-zinc-700">Target Profile Field</label>
-                <select
-                  value={fixFieldName}
-                  onChange={(e) => setFixFieldName(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 text-xs border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="phone">Contact / Phone Number</option>
-                  <option value="github_username">GitHub Username</option>
-                  <option value="cgpa">CGPA / Marks</option>
-                  <option value="full_name">Full Candidate Name</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-zinc-700">Correction Value</label>
-                <input
-                  type="text"
-                  placeholder="e.g. +1 (555) 019-2834"
-                  value={fixFieldValue}
-                  onChange={(e) => setFixFieldValue(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 text-xs border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedFailure(null)}
-                  className="px-4 py-2 text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!fixFieldValue || submittingFix}
-                  className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
-                >
-                  {submittingFix && <RefreshCw className="w-3 h-3 animate-spin" />}
-                  {submittingFix ? 'Saving Fix...' : 'Save & Re-attempt Registration'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

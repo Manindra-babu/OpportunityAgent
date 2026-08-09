@@ -94,7 +94,6 @@ export const getProfile = async () => {
 };
 
 export const uploadResume = async (formData) => {
-  // Use Axios native postForm method for 100% crash-proof multipart/form-data uploads
   const res = await api.postForm('/profile/resume', formData);
   return res.data;
 };
@@ -142,7 +141,7 @@ export const getNews = async () => {
 };
 
 export const refreshNewsNow = async () => {
-  const res = await api.post('/news/refresh-now');
+  const res = await api.post('/news/refresh');
   return res.data;
 };
 
@@ -159,24 +158,29 @@ export const updateThreshold = async (threshold) => {
 };
 
 export const getActivityLogs = async () => {
-  const res = await api.get('/logs');
-  return res.data;
+  const res = await api.get('/activity');
+  return Array.isArray(res.data) ? res.data : [];
 };
 
 export const getLogs = getActivityLogs;
 
 export const getFailureMemory = async () => {
-  const res = await api.get('/logs/failure-memory');
-  return res.data;
+  const res = await api.get('/activity/failure-memory');
+  return Array.isArray(res.data) ? res.data : [];
+};
+
+export const getRules = async () => {
+  const res = await api.get('/activity/rules');
+  return Array.isArray(res.data) ? res.data : [];
 };
 
 export const getMetrics = async () => {
-  const res = await api.get('/logs/metrics');
+  const res = await api.get('/activity/metrics');
   return res.data;
 };
 
 export const submitUserFix = async (payload) => {
-  const res = await api.post('/logs/user-fix', payload);
+  const res = await api.post('/activity/user-fix', payload);
   return res.data;
 };
 
