@@ -1,5 +1,6 @@
 import datetime
 import logging
+import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -130,10 +131,14 @@ def gmail_oauth_start(
             base_url = str(request.base_url).rstrip('/')
             if request.headers.get("x-forwarded-proto") == "https" and base_url.startswith("http://"):
                 base_url = "https://" + base_url[7:]
+            elif not base_url.startswith("http://") and not base_url.startswith("https://"):
+                base_url = "https://" + base_url
             redirect_uri = f"{base_url}/credentials/gmail/oauth/callback"
 
         scope = "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"
-        url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={settings.GMAIL_CLIENT_ID}&redirect_uri={redirect_uri}&scope={scope}&access_type=offline&prompt=consent"
+        scope_encoded = urllib.parse.quote(scope)
+        redirect_uri_encoded = urllib.parse.quote(redirect_uri, safe="")
+        url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={settings.GMAIL_CLIENT_ID}&redirect_uri={redirect_uri_encoded}&scope={scope_encoded}&access_type=offline&prompt=consent"
         return {"status": "success", "redirect": True, "url": url, "message": f"Connected to Gmail ({current_user.email})!"}
 
     return {
