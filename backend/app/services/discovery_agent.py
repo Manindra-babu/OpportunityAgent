@@ -1,46 +1,56 @@
 import asyncio
 import logging
 import datetime
-import urllib.request
+import re
+import json
 from typing import List, Dict, Any
+import httpx
 from sqlalchemy.orm import Session
 from app.models import Opportunity, ActivityLog
 from playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
 
+LEGACY_MOCK_TITLES = [
+    "Infosys InStep Global Flagship Internship 2026",
+    "Google Cloud AI Engineer Student Intern",
+    "Microsoft Software Engineering Student Intern 2026",
+    "Microsoft AI Research & LLM Engineering Intern",
+    "Google STEP & Software Engineering Student Intern 2026",
+    "Infosys HackWithInfy National Hackathon & Hiring Challenge",
+    "Python & FastAPI Backend Intern",
+    "Full Stack AI Engineer Intern",
+    "Frontend Developer Intern (React/TypeScript)",
+    "Agentic AI Engineering Challenge",
+    "ETHIndia 2026 Hackathon",
+    "AI Innovate Buildathon",
+    "Upcoming: Global AI Builders & Agentic Hackathon 2026",
+    "Upcoming: National AI & Coding Championship 2026",
+    "Upcoming: Google Tech Student Summit & Hackathon 2026"
+]
+
 def log_activity(db: Session, agent_name: str, action: str, details: str):
     log = ActivityLog(agent_name=agent_name, action=action, details=details)
     db.add(log)
     db.commit()
 
-async def is_link_live_and_valid(url: str) -> bool:
+def purge_legacy_mock_data(db: Session):
     """
-    Dynamically navigates to URL via Playwright and checks if link is live (200 OK)
-    and not returning 404 / 'Page Not Found' errors.
+    Purges legacy hardcoded mock postings from the database so the feed contains ONLY real live postings.
     """
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            response = await page.goto(url, timeout=10000, wait_until="domcontentloaded")
-            
-            if not response or response.status >= 400:
-                await browser.close()
-                return False
-
-            title = await page.title()
-            content = await page.content()
-            await browser.close()
-
-            lowered = (title + " " + content[:2000]).lower()
-            if "page not found" in lowered or "404" in lowered or "we are sorry" in lowered or "job expired" in lowered:
-                return False
-
-            return True
+        from app.models import OpportunityScore, Registration
+        mock_opps = db.query(Opportunity).filter(Opportunity.title.in_(LEGACY_MOCK_TITLES)).all()
+        if mock_opps:
+            count = len(mock_opps)
+            mock_ids = [o.id for o in mock_opps]
+            db.query(OpportunityScore).filter(OpportunityScore.opportunity_id.in_(mock_ids)).delete(synchronize_session=False)
+            db.query(Registration).filter(Registration.opportunity_id.in_(mock_ids)).delete(synchronize_session=False)
+            db.query(Opportunity).filter(Opportunity.id.in_(mock_ids)).delete(synchronize_session=False)
+            db.commit()
+            logger.info(f"Purged {count} legacy mock opportunity records from database.")
     except Exception as e:
-        logger.warning(f"URL validation check failed for {url}: {e}")
-        return True  # Fallback to keep link if timeout occurs during check
+        logger.warning(f"Error purging mock opportunity records: {e}")
 
 class BaseScraper:
     name: str = "Base"
@@ -48,8 +58,74 @@ class BaseScraper:
     async def scrape(self) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
+class LiveArbeitnowScraper(BaseScraper):
+    name: str = "Arbeitnow Tech Jobs & Internships"
+
+    async def scrape(self) -> List[Dict[str, Any]]:
+        results = []
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get("https://www.arbeitnow.com/api/job-board-api")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    jobs = data.get("data", [])
+                    for job in jobs[:10]:
+                        title = job.get("title", "")
+                        url = job.get("url", "")
+                        company = job.get("company_name", "")
+                        description = re.sub('<[^<]+?>', '', job.get("description", ""))[:300]
+                        tags = job.get("tags", [])
+                        
+                        is_internship = "intern" in title.lower() or "internship" in title.lower() or any("intern" in t.lower() for t in tags)
+                        category = "Internship" if is_internship else "Full-Stack Opportunity"
+
+                        if title and url:
+                            results.append({
+                                "source": f"Arbeitnow ({company})" if company else "Arbeitnow",
+                                "url": url,
+                                "title": f"{title} - {company}" if company else title,
+                                "description": description or f"Software development opportunity at {company}.",
+                                "category": category,
+                                "deadline": "Apply on Official Site"
+                            })
+        except Exception as e:
+            logger.warning(f"Arbeitnow live fetch error: {e}")
+        return results
+
+class LiveHackerNewsJobScraper(BaseScraper):
+    name: str = "HackerNews Hiring"
+
+    async def scrape(self) -> List[Dict[str, Any]]:
+        results = []
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get("https://hacker-news.firebaseio.com/v0/jobstories.json")
+                if resp.status_code == 200:
+                    story_ids = resp.json()[:8]
+                    for s_id in story_ids:
+                        s_resp = await client.get(f"https://hacker-news.firebaseio.com/v0/item/{s_id}.json")
+                        if s_resp.status_code == 200:
+                            s_data = s_resp.json()
+                            title = s_data.get("title", "")
+                            url = s_data.get("url") or f"https://news.ycombinator.com/item?id={s_id}"
+                            text = s_data.get("text", "")
+                            desc = re.sub('<[^<]+?>', '', text)[:300] if text else "Verified tech hiring post on YCombinator HackerNews."
+
+                            if title:
+                                results.append({
+                                    "source": "YCombinator HackerNews",
+                                    "url": url,
+                                    "title": title,
+                                    "description": desc,
+                                    "category": "Internship" if "intern" in title.lower() else "Software Engineering",
+                                    "deadline": "Open"
+                                })
+        except Exception as e:
+            logger.warning(f"HackerNews job fetch error: {e}")
+        return results
+
 class DevfolioScraper(BaseScraper):
-    name: str = "Devfolio"
+    name: str = "Devfolio Hackathons"
 
     async def scrape(self) -> List[Dict[str, Any]]:
         results = []
@@ -61,43 +137,27 @@ class DevfolioScraper(BaseScraper):
                 await page.wait_for_selector("a[href*='devfolio.co']", timeout=5000)
 
                 cards = await page.query_selector_all("a[href*='devfolio.co']")
-                for card in cards[:5]:
+                for card in cards[:6]:
                     url = await card.get_attribute("href")
                     title = await card.inner_text()
-                    if url and title and "devfolio.co" in url:
-                        results.append({
-                            "source": self.name,
-                            "url": url if url.startswith("http") else f"https://{url}",
-                            "title": title.strip().split("\n")[0][:100],
-                            "description": "Devfolio Hackathon event - build innovations with cutting-edge AI and cloud APIs.",
-                            "category": "Hackathon",
-                            "deadline": "Registration open"
-                        })
+                    if url and title and "devfolio.co" in url and not url.endswith("/hackathons"):
+                        clean_title = title.strip().split("\n")[0][:100]
+                        if clean_title and len(clean_title) > 3:
+                            results.append({
+                                "source": self.name,
+                                "url": url if url.startswith("http") else f"https://{url}",
+                                "title": clean_title,
+                                "description": "Devfolio live hackathon event. Build innovation with cutting-edge AI, Web3, and cloud APIs.",
+                                "category": "Hackathon",
+                                "deadline": "Registration open"
+                            })
                 await browser.close()
         except Exception as e:
-            logger.warning(f"Devfolio scraper fallback triggered: {e}")
-            results = [
-                {
-                    "source": self.name,
-                    "url": "https://ethindia2026.devfolio.co",
-                    "title": "ETHIndia 2026 Hackathon",
-                    "description": "Asia's largest Web3 and AI hackathon. Looking for full-stack developers, smart contract devs, and AI engineers.",
-                    "category": "Hackathon",
-                    "deadline": "2026-08-30"
-                },
-                {
-                    "source": self.name,
-                    "url": "https://ai-innovate-build.devfolio.co",
-                    "title": "AI Innovate Buildathon",
-                    "description": "Build autonomous agent platforms, LLM workflows, and React applications. Prizes over $15,000.",
-                    "category": "Hackathon",
-                    "deadline": "2026-09-15"
-                }
-            ]
+            logger.warning(f"Devfolio scraper error: {e}")
         return results
 
 class UnstopScraper(BaseScraper):
-    name: str = "Unstop"
+    name: str = "Unstop Opportunities"
 
     async def scrape(self) -> List[Dict[str, Any]]:
         results = []
@@ -106,212 +166,39 @@ class UnstopScraper(BaseScraper):
                 browser = await p.chromium.launch(headless=True)
                 page = await browser.new_page()
                 await page.goto("https://unstop.com/hackathons", timeout=15000)
-                await page.wait_for_selector(".opportunity_card", timeout=5000)
-                cards = await page.query_selector_all(".opportunity_card")
-                for card in cards[:5]:
-                    title_elem = await card.query_selector("h3, h2, .heading")
-                    title = await title_elem.inner_text() if title_elem else "Unstop Hackathon"
-                    url_elem = await card.query_selector("a")
-                    url = await url_elem.get_attribute("href") if url_elem else None
-                    if url:
-                        results.append({
-                            "source": self.name,
-                            "url": url if url.startswith("http") else f"https://unstop.com{url}",
-                            "title": title.strip()[:100],
-                            "description": "Unstop premier competitive coding and hackathon challenge for engineering students.",
-                            "category": "Hackathon",
-                            "deadline": "Apply by next week"
-                        })
+                await page.wait_for_selector("a[href*='unstop.com']", timeout=5000)
+                cards = await page.query_selector_all("a[href*='unstop.com']")
+                for card in cards[:6]:
+                    url = await card.get_attribute("href")
+                    title = await card.inner_text()
+                    if url and title and len(title.strip()) > 5:
+                        clean_title = title.strip().split("\n")[0][:100]
+                        if clean_title and not clean_title.lower().startswith("login"):
+                            results.append({
+                                "source": self.name,
+                                "url": url if url.startswith("http") else f"https://unstop.com{url}",
+                                "title": clean_title,
+                                "description": "Unstop premier competitive coding and hackathon challenge for engineering students.",
+                                "category": "Hackathon",
+                                "deadline": "Apply on Official Site"
+                            })
                 await browser.close()
         except Exception as e:
-            logger.warning(f"Unstop scraper fallback triggered: {e}")
-            results = [
-                {
-                    "source": self.name,
-                    "url": "https://unstop.com/competitions/agentic-ai-challenge-2026",
-                    "title": "Agentic AI Engineering Challenge",
-                    "description": "Build real-world multi-agent systems with Python, FastAPI, and LLM orchestration. Open to computer science undergraduates.",
-                    "category": "Hackathon",
-                    "deadline": "2026-08-25"
-                },
-                {
-                    "source": self.name,
-                    "url": "https://unstop.com/internships/frontend-developer-intern-tech-corp",
-                    "title": "Frontend Developer Intern (React/TypeScript)",
-                    "description": "6-month stipend-backed internship creating high-performance SaaS applications with React, Tailwind, and REST APIs.",
-                    "category": "Internship",
-                    "deadline": "2026-08-20"
-                }
-            ]
+            logger.warning(f"Unstop scraper error: {e}")
         return results
-
-class InternshalaScraper(BaseScraper):
-    name: str = "Internshala"
-
-    async def scrape(self) -> List[Dict[str, Any]]:
-        results = [
-            {
-                "source": self.name,
-                "url": "https://internshala.com/internships",
-                "title": "Python & FastAPI Backend Intern",
-                "description": "Remote internship building scalable microservices, database schemas with SQLAlchemy, and LLM API integrations.",
-                "category": "Internship",
-                "deadline": "2026-08-28"
-            },
-            {
-                "source": self.name,
-                "url": "https://internshala.com/internships/matching",
-                "title": "Full Stack AI Engineer Intern",
-                "description": "Develop full-stack web applications with React, Vite, Python FastAPI, and Groq LLM pipelines.",
-                "category": "Internship",
-                "deadline": "2026-09-05"
-            }
-        ]
-        return results
-
-class MicrosoftCareersScraper(BaseScraper):
-    name: str = "Microsoft Careers"
-
-    async def scrape(self) -> List[Dict[str, Any]]:
-        results = [
-            {
-                "source": self.name,
-                "url": "https://careers.microsoft.com/v2/global/en/students.html",
-                "title": "Microsoft Software Engineering Student Intern 2026",
-                "description": "Microsoft University Internship Program. Work on Azure Cloud Services, AI Copilot, and scalable distributed systems using Python, C#, and TypeScript.",
-                "category": "Internship",
-                "deadline": "2026-09-30"
-            },
-            {
-                "source": self.name,
-                "url": "https://careers.microsoft.com/v2/global/en/home.html",
-                "title": "Microsoft AI Research & LLM Engineering Intern",
-                "description": "Join Microsoft Research AI labs. Build foundation model benchmarks, agentic workflows, and high-performance neural inference.",
-                "category": "Internship",
-                "deadline": "2026-10-15"
-            }
-        ]
-        return results
-
-class GoogleCareersScraper(BaseScraper):
-    name: str = "Google Careers"
-
-    async def scrape(self) -> List[Dict[str, Any]]:
-        results = [
-            {
-                "source": self.name,
-                "url": "https://buildyourfuture.withgoogle.com/internships",
-                "title": "Google STEP & Software Engineering Student Intern 2026",
-                "description": "Google Summer Student Internship Program. Collaborate with Google Cloud & DeepMind engineering teams building distributed Python & React systems.",
-                "category": "Internship",
-                "deadline": "2026-09-20"
-            },
-            {
-                "source": self.name,
-                "url": "https://www.google.com/about/careers/applications/jobs/results/?q=intern",
-                "title": "Google Cloud AI Engineer Student Intern",
-                "description": "Design and deploy scalable AI agents, RESTful microservices, and modern frontend UIs on Google Cloud Platform.",
-                "category": "Internship",
-                "deadline": "2026-10-01"
-            }
-        ]
-        return results
-
-class InfosysCareersScraper(BaseScraper):
-    name: str = "Infosys Careers"
-
-    async def scrape(self) -> List[Dict[str, Any]]:
-        results = [
-            {
-                "source": self.name,
-                "url": "https://www.infosys.com/instep.html",
-                "title": "Infosys InStep Global Flagship Internship 2026",
-                "description": "Infosys prestigious international internship program. Work directly on AI solutions, full-stack microservices, and enterprise automation.",
-                "category": "Internship",
-                "deadline": "2026-09-10"
-            },
-            {
-                "source": self.name,
-                "url": "https://unstop.com/competitions/hackwithinfy-infosys",
-                "title": "Infosys HackWithInfy National Hackathon & Hiring Challenge",
-                "description": "Infosys flagship competitive coding and hackathon challenge for engineering students. Direct interview calls for high-performing coders.",
-                "category": "Hackathon",
-                "deadline": "2026-08-31"
-            }
-        ]
-        return results
-
-class UpcomingEventsScraper(BaseScraper):
-    name: str = "Upcoming Events & Summits"
-
-    async def scrape(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "source": "Devfolio",
-                "url": "https://global-ai-hackathon-2026.devfolio.co",
-                "title": "Upcoming: Global AI Builders & Agentic Hackathon 2026",
-                "description": "Upcoming international hackathon. Event starts on September 15, 2026. Pre-registration is open for agentic workflow developers.",
-                "category": "Upcoming Event",
-                "start_date": "2026-09-15",
-                "deadline": "2026-09-10",
-                "is_upcoming": True
-            },
-            {
-                "source": "Unstop",
-                "url": "https://unstop.com/hackathons/national-coding-league-upcoming-2026",
-                "title": "Upcoming: National AI & Coding Championship 2026",
-                "description": "Upcoming flagship competitive programming event for computer science undergraduates. Starts October 1, 2026.",
-                "category": "Upcoming Event",
-                "start_date": "2026-10-01",
-                "deadline": "2026-09-25",
-                "is_upcoming": True
-            },
-            {
-                "source": "Google Careers",
-                "url": "https://buildyourfuture.withgoogle.com/events/upcoming-summit-2026",
-                "title": "Upcoming: Google Tech Student Summit & Hackathon 2026",
-                "description": "Upcoming student summit hosted by Google DeepMind & Google Cloud. Event starts September 20, 2026.",
-                "category": "Upcoming Event",
-                "start_date": "2026-09-20",
-                "deadline": "2026-09-18",
-                "is_upcoming": True
-            }
-        ]
 
 SCRAPERS: List[BaseScraper] = [
+    LiveArbeitnowScraper(),
+    LiveHackerNewsJobScraper(),
     DevfolioScraper(),
-    UnstopScraper(),
-    InternshalaScraper(),
-    MicrosoftCareersScraper(),
-    GoogleCareersScraper(),
-    InfosysCareersScraper(),
-    UpcomingEventsScraper()
+    UnstopScraper()
 ]
 
-# URL Migrations for updating broken legacy links in existing DB records
-URL_MIGRATIONS = {
-    "https://www.infosys.com/careers/instep/internship-2026.html": "https://www.infosys.com/instep.html",
-    "https://www.infosys.com/hackwithinfy-2026.html": "https://unstop.com/competitions/hackwithinfy-infosys",
-    "https://careers.microsoft.com/students/us/en/job/170101/Software-Engineering-Intern-2026": "https://careers.microsoft.com/v2/global/en/students.html",
-    "https://careers.microsoft.com/students/us/en/job/170202/AI-Research-Intern-2026": "https://careers.microsoft.com/v2/global/en/home.html",
-    "https://www.google.com/about/careers/applications/jobs/results/1098234-software-engineering-intern-2026": "https://buildyourfuture.withgoogle.com/internships",
-    "https://www.google.com/about/careers/applications/jobs/results/1098555-cloud-ai-engineer-intern": "https://www.google.com/about/careers/applications/jobs/results/?q=intern"
-}
-
-def fix_legacy_urls(db: Session):
-    for old_url, new_url in URL_MIGRATIONS.items():
-        existing_old = db.query(Opportunity).filter(Opportunity.url == old_url).first()
-        if existing_old:
-            existing_new = db.query(Opportunity).filter(Opportunity.url == new_url).first()
-            if existing_new:
-                db.delete(existing_old)
-            else:
-                existing_old.url = new_url
-    db.commit()
-
 async def run_discovery_pipeline(db: Session) -> List[Opportunity]:
-    fix_legacy_urls(db)
+    # 1. Purge outdated/hardcoded legacy mock postings
+    purge_legacy_mock_data(db)
 
+    # 2. Run all live real scrapers
     discovered_items = []
     for scraper in SCRAPERS:
         try:
@@ -344,6 +231,6 @@ async def run_discovery_pipeline(db: Session) -> List[Opportunity]:
             added_opps.append(opp)
 
     db.commit()
-    log_activity(db, "Discovery Agent", "Scraped Opportunities", f"Discovered {len(discovered_items)} opportunities ({len(added_opps)} new unique links added to database).")
+    log_activity(db, "Discovery Agent", "Scraped Live Opportunities", f"Discovered {len(discovered_items)} real live opportunities ({len(added_opps)} new unique postings added to database).")
 
     return added_opps

@@ -115,6 +115,9 @@ async def startup_event():
             logger.info(f"Seeded default test user: {default_email} / password123")
 
         fetch_rss_news(db)
+        from app.services.discovery_agent import purge_legacy_mock_data
+        purge_legacy_mock_data(db)
+
         from app.models import Opportunity
         if db.query(Opportunity).count() == 0:
             await run_discovery_pipeline(db)
