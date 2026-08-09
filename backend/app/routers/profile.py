@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, Profile
-from app.schemas import ProfileOut
+from app.schemas import ProfileOut, ProfileBase
 from app.security.auth import get_current_user
 from app.services.profile_builder import parse_resume_file, fetch_github_data, diff_and_merge_profile
 
