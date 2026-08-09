@@ -2,6 +2,7 @@ import datetime
 import logging
 import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -147,7 +148,7 @@ def gmail_oauth_start(
         "message": f"Connected to Gmail ({current_user.email})!"
     }
 
-@router.get("/gmail/oauth/callback")
+@router.get("/gmail/oauth/callback", response_class=HTMLResponse)
 def gmail_oauth_callback(
     code: str = "",
     current_user: User = Depends(get_current_user),
@@ -160,10 +161,41 @@ def gmail_oauth_callback(
 
     cred.gmail_connected = True
     cred.gmail_email = current_user.email
-    cred.gmail_refresh_token_encrypted = encrypt_credential(f"refresh_token_for_{code[:10]}")
+    cred.gmail_refresh_token_encrypted = encrypt_credential(f"refresh_token_for_{code[:10] if code else 'default'}")
     db.commit()
 
-    return {"status": "success", "gmail_connected": True, "gmail_email": current_user.email}
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Gmail Connected | OpportunityAgent</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+      <meta http-equiv="refresh" content="2;url=/">
+    </head>
+    <body class="bg-zinc-950 text-white min-h-screen flex items-center justify-center font-sans p-4">
+      <div class="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+        <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">
+          ✓
+        </div>
+        <div class="space-y-2">
+          <h1 class="text-xl font-bold tracking-tight text-white">Gmail Integration Connected!</h1>
+          <p class="text-xs text-zinc-400">
+            Successfully connected <span class="font-semibold text-emerald-400">{current_user.email}</span> with OpportunityAgent.
+          </p>
+        </div>
+        <div class="pt-2">
+          <a href="/" class="inline-flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shadow-lg">
+            Return to App Dashboard →
+          </a>
+        </div>
+        <p class="text-[11px] text-zinc-500">Redirecting automatically in 2 seconds...</p>
+      </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content, status_code=200)
 
 @router.delete("/gmail")
 def disconnect_gmail(
