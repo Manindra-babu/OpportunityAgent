@@ -5,6 +5,7 @@ from app.models import User, SystemSettings, ActivityLog, UserCredential
 from app.schemas import ThresholdUpdate
 from app.security.auth import get_current_user
 from app.config import settings
+from app.services.relevance_agent import evaluate_all_unscored_for_user
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
@@ -47,8 +48,16 @@ def update_threshold(
 
     db.commit()
 
-    log = ActivityLog(user_id=current_user.id, agent_name="Settings", action="Threshold Updated", details=f"Relevance threshold set to {payload.threshold}%")
+    log = ActivityLog(
+        user_id=current_user.id,
+        agent_name="Settings",
+        action="Threshold Updated",
+        details=f"Relevance threshold updated to {payload.threshold}%. Re-evaluating candidate matches..."
+    )
     db.add(log)
     db.commit()
+
+    # Re-evaluate all candidate matches against the new threshold
+    evaluate_all_unscored_for_user(db, current_user.id)
 
     return {"status": "success", "threshold": payload.threshold}

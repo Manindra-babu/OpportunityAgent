@@ -2,7 +2,7 @@ import logging
 import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.models import Profile, Opportunity, OpportunityScore, Registration, ActivityLog
+from app.models import Profile, Opportunity, OpportunityScore, Registration, ActivityLog, SystemSettings
 from app.llm_client import llm_client
 from app.config import settings
 
@@ -13,6 +13,18 @@ def log_activity(db: Session, user_id: Optional[int], agent_name: str, action: s
     db.add(log)
     db.commit()
 
+def get_user_threshold(db: Session, user_id: int) -> float:
+    thresh_rec = db.query(SystemSettings).filter(
+        SystemSettings.key == "relevance_threshold",
+        SystemSettings.user_id == user_id
+    ).first()
+    if thresh_rec and thresh_rec.value:
+        try:
+            return float(thresh_rec.value)
+        except ValueError:
+            pass
+    return settings.RELEVANCE_THRESHOLD
+
 def evaluate_opportunity_relevance_for_user(
     db: Session,
     user_id: int,
@@ -21,6 +33,8 @@ def evaluate_opportunity_relevance_for_user(
 ) -> OpportunityScore:
     if not profile:
         profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+
+    user_thresh = get_user_threshold(db, user_id)
 
     skills_str = ", ".join(profile.skills) if profile and profile.skills else "Python, React, JavaScript"
     domain_str = profile.primary_domain if profile and profile.primary_domain else "Full Stack Development"
@@ -47,13 +61,12 @@ def evaluate_opportunity_relevance_for_user(
         f"Description: {opp.description}\n"
     )
 
-    # Rule-based match score calculation if LLM key is absent
     title_lower = opp.title.lower()
     desc_lower = opp.description.lower()
     match_count = sum(1 for s in (profile.skills if profile else []) if s.lower() in title_lower or s.lower() in desc_lower)
 
     calculated_score = min(98.0, max(45.0, 60.0 + (match_count * 12.0)))
-    if "full stack" in title_lower or "python" in title_lower or "react" in title_lower or "agent" in title_lower:
+    if "full stack" in title_lower or "python" in title_lower or "react" in title_lower or "agent" in title_lower or "ai" in title_lower or "machine learning" in title_lower:
         calculated_score = max(calculated_score, 88.0)
 
     fallback = {
@@ -96,7 +109,7 @@ def evaluate_opportunity_relevance_for_user(
         existing_score.evaluated_at = datetime.datetime.utcnow()
         score_obj = existing_score
 
-    # Initialize user registration record
+    # Initialize user registration record based on dynamic user threshold
     reg = db.query(Registration).filter(
         Registration.opportunity_id == opp.id,
         Registration.user_id == user_id
@@ -106,9 +119,12 @@ def evaluate_opportunity_relevance_for_user(
         reg = Registration(
             user_id=user_id,
             opportunity_id=opp.id,
-            status="pending_reply" if (score_val >= settings.RELEVANCE_THRESHOLD and eligible_val) else "skipped"
+            status="pending_reply" if (score_val >= user_thresh and eligible_val) else "skipped"
         )
         db.add(reg)
+    else:
+        if score_val >= user_thresh and eligible_val and reg.status == "skipped":
+            reg.status = "pending_reply"
 
     db.commit()
     db.refresh(score_obj)
@@ -118,10 +134,10 @@ def evaluate_opportunity_relevance_for_user(
         user_id,
         "Relevance Agent",
         f"Scored '{opp.title[:30]}...'",
-        f"Score: {score_val}/100 ({'Qualified' if score_val >= settings.RELEVANCE_THRESHOLD else 'Below Threshold'}). Reason: {reason_val}"
+        f"Score: {score_val}/100 ({'Qualified' if score_val >= user_thresh else 'Below Threshold'} vs target {user_thresh}%). Reason: {reason_val}"
     )
 
-    if score_val >= settings.RELEVANCE_THRESHOLD and eligible_val:
+    if score_val >= user_thresh and eligible_val:
         from app.services.notification_agent import send_opportunity_notification_for_user
         send_opportunity_notification_for_user(db, user_id, opp, score_obj)
 
@@ -132,9 +148,4 @@ def evaluate_all_unscored_for_user(db: Session, user_id: int):
     opps = db.query(Opportunity).all()
 
     for opp in opps:
-        existing = db.query(OpportunityScore).filter(
-            OpportunityScore.opportunity_id == opp.id,
-            OpportunityScore.user_id == user_id
-        ).first()
-        if not existing:
-            evaluate_opportunity_relevance_for_user(db, user_id, opp, profile)
+        evaluate_opportunity_relevance_for_user(db, user_id, opp, profile)
