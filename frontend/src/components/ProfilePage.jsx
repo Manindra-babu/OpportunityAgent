@@ -46,6 +46,10 @@ export default function ProfilePage({
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailError, setGmailError] = useState('');
+  const [gmailSuccessMsg, setGmailSuccessMsg] = useState('');
+
   const [isEditing, setIsEditing] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
