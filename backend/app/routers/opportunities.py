@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.services.relevance_agent import evaluate_all_unscored_for_user
 from app.services.notification_agent import process_user_email_reply_for_user
 from app.services.registration_agent import attempt_registration_for_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/opportunities", tags=["Opportunities"])
 
 @router.get("", response_model=List[OpportunityOut])
@@ -20,7 +22,6 @@ def list_opportunities(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Evaluate any unscored opportunities for this logged-in user first
     evaluate_all_unscored_for_user(db, current_user.id)
 
     opps = db.query(Opportunity).all()
@@ -55,6 +56,7 @@ def list_opportunities(
             "deadline": opp.deadline,
             "category": opp.category,
             "discovered_at": opp.discovered_at,
+            "user_score": score_rec,
             "score_rel": score_rec,
             "registration_rel": reg_rec
         })
@@ -77,14 +79,19 @@ def manual_action(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    action = payload.action.lower()
-    opp_id = payload.opportunity_id
+    try:
+        action = payload.action.lower()
+        opp_id = payload.opportunity_id
 
-    if action in ["yes", "no", "skip"]:
-        process_user_email_reply_for_user(db, current_user.id, opp_id, action)
-        return {"status": "success", "message": f"Processed action '{action}' for user"}
-    elif action == "register_now":
-        attempt_registration_for_user(db, current_user.id, opp_id)
-        return {"status": "success", "message": "Initiated manual registration attempt"}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action string")
+        if action in ["yes", "no", "skip"]:
+            process_user_email_reply_for_user(db, current_user.id, opp_id, action)
+            return {"status": "success", "message": f"Processed action '{action}' for user"}
+        elif action in ["register_now", "register"]:
+            attempt_registration_for_user(db, current_user.id, opp_id)
+            return {"status": "success", "message": "Initiated manual registration attempt"}
+        else:
+            process_user_email_reply_for_user(db, current_user.id, opp_id, action)
+            return {"status": "success", "message": f"Processed action '{action}'"}
+    except Exception as e:
+        logger.error(f"Error executing manual action: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process registration action: {str(e)}")

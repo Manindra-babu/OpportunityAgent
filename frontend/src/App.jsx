@@ -235,6 +235,7 @@ export default function App() {
         {activeTab === 'feed' && (
           <FeedPage
             opportunities={opportunities}
+            threshold={settings?.relevance_threshold || 70}
             loading={oppLoading}
             onTriggerDiscovery={handleTriggerDiscovery}
             onManualAction={handleManualAction}

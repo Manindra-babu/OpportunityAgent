@@ -57,7 +57,8 @@ class ProfileOut(ProfileBase):
         from_attributes = True
 
 class ManualRegistrationRequest(BaseModel):
-    action: str = "register"
+    opportunity_id: int
+    action: str = "yes"
 
 class ThresholdUpdate(BaseModel):
     threshold: float
@@ -67,9 +68,12 @@ class OpportunityScoreOut(BaseModel):
     opportunity_id: int
     score: float
     role_category: str
-    match_reasoning: str
-    fit_status: str
-    calculated_at: datetime.datetime
+    match_reasoning: Optional[str] = None
+    reason: Optional[str] = None
+    fit_status: Optional[str] = None
+    eligible: Optional[bool] = True
+    calculated_at: Optional[datetime.datetime] = None
+    evaluated_at: Optional[datetime.datetime] = None
 
     class Config:
         from_attributes = True
@@ -84,6 +88,7 @@ class OpportunityOut(BaseModel):
     category: str
     discovered_at: datetime.datetime
     user_score: Optional[OpportunityScoreOut] = None
+    score_rel: Optional[OpportunityScoreOut] = None
 
     class Config:
         from_attributes = True
