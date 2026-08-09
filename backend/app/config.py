@@ -12,7 +12,29 @@ except ImportError:
 def get_or_create_fernet_key():
     key = os.getenv("CREDENTIAL_ENCRYPTION_KEY", "")
     if not key:
-        key = Fernet.generate_key().decode()
+        key_file_path = os.path.join(os.path.dirname(__file__), "..", ".fernet_key")
+        env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+        
+        if os.path.exists(key_file_path):
+            try:
+                with open(key_file_path, "r", encoding="utf-8") as f:
+                    key = f.read().strip()
+            except Exception:
+                pass
+
+        if not key:
+            key = Fernet.generate_key().decode()
+            try:
+                with open(key_file_path, "w", encoding="utf-8") as f:
+                    f.write(key)
+            except Exception:
+                pass
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "a", encoding="utf-8") as f:
+                        f.write(f"\nCREDENTIAL_ENCRYPTION_KEY={key}\n")
+                except Exception:
+                    pass
     elif isinstance(key, str):
         try:
             Fernet(key.encode())

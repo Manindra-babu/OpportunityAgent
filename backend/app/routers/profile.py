@@ -112,3 +112,45 @@ async def sync_github(
         github_repos=github_repos
     )
     return profile
+
+@router.put("", response_model=ProfileOut)
+def update_profile(
+    payload: ProfileBase,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    if not profile:
+        profile = Profile(user_id=current_user.id)
+        db.add(profile)
+
+    if payload.full_name is not None:
+        profile.full_name = payload.full_name
+    if payload.email is not None:
+        profile.email = payload.email
+    if payload.phone is not None:
+        profile.phone = payload.phone
+    if payload.cgpa is not None:
+        profile.cgpa = str(payload.cgpa)
+    if payload.primary_domain is not None:
+        profile.primary_domain = payload.primary_domain
+    if payload.skills is not None:
+        profile.skills = payload.skills
+    if payload.projects is not None:
+        profile.projects = payload.projects
+    if payload.education is not None:
+        profile.education = payload.education
+    if payload.github_username is not None:
+        profile.github_username = payload.github_username
+
+    db.commit()
+    db.refresh(profile)
+
+    try:
+        from app.services.profile_builder import log_activity, reevaluate_recent_opportunities_for_user
+        log_activity(db, current_user.id, "Profile Builder", "Master Profile Updated", "Manually updated candidate master profile fields.")
+        reevaluate_recent_opportunities_for_user(db, current_user.id, profile)
+    except Exception as e:
+        logger.warning(f"Re-evaluation after profile update failed: {e}")
+
+    return profile

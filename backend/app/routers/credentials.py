@@ -15,14 +15,25 @@ router = APIRouter(prefix="/credentials", tags=["Credentials"])
 class GroqKeyRequest(BaseModel):
     groq_api_key: str
 
+from groq import Groq
+
 @router.get("/status")
 def get_credentials_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     cred = db.query(UserCredential).filter(UserCredential.user_id == current_user.id).first()
+    groq_is_valid = False
+    if cred and cred.groq_connected and cred.groq_api_key_encrypted:
+        raw_key = decrypt_credential(cred.groq_api_key_encrypted)
+        if raw_key:
+            groq_is_valid = True
+        else:
+            cred.groq_connected = False
+            db.commit()
+
     return {
-        "groq_connected": bool(cred and cred.groq_connected),
+        "groq_connected": groq_is_valid,
         "gmail_connected": bool(cred and cred.gmail_connected),
         "gmail_email": cred.gmail_email if (cred and cred.gmail_connected) else None
     }
@@ -39,6 +50,18 @@ def save_groq_key(
             status_code=400,
             detail="Please paste your actual Groq API key from console.groq.com/keys."
         )
+
+    try:
+        client = Groq(api_key=key)
+        client.models.list()
+    except Exception as e:
+        err_msg = str(e)
+        logger.warning(f"Groq API key validation warning for user {current_user.id}: {err_msg}")
+        if "401" in err_msg or "invalid" in err_msg.lower() or "authentication" in err_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Groq API Key. Please verify your key at console.groq.com/keys."
+            )
 
     encrypted_key = encrypt_credential(key)
 

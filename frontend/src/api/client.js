@@ -93,6 +93,11 @@ export const getProfile = async () => {
   return res.data;
 };
 
+export const updateProfile = async (profileData) => {
+  const res = await api.put('/profile', profileData);
+  return res.data;
+};
+
 export const uploadResume = async (formData) => {
   const res = await api.postForm('/profile/resume', formData);
   return res.data;

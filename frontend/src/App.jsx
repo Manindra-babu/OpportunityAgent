@@ -18,6 +18,7 @@ import {
   startGmailOAuth,
   deleteGmail,
   getProfile,
+  updateProfile,
   uploadResume,
   syncGithub,
   getOpportunities,
@@ -160,6 +161,12 @@ export default function App() {
     await loadUserData();
   };
 
+  const handleUpdateProfile = async (profileData) => {
+    const res = await updateProfile(profileData);
+    await loadUserData();
+    return res;
+  };
+
   const handleUploadResume = async (fileOrFormData) => {
     let formData = fileOrFormData;
     if (!(fileOrFormData instanceof FormData)) {
@@ -253,6 +260,7 @@ export default function App() {
           <ProfilePage
             profile={profile}
             credStatus={credStatus}
+            onUpdateProfile={handleUpdateProfile}
             onUploadResume={handleUploadResume}
             onSyncGithub={handleSyncGithub}
             onSaveGroqKey={handleSaveGroqKey}
