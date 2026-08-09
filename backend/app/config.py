@@ -55,6 +55,7 @@ class Settings:
     DATABASE_URL: str = get_database_url()
     GMAIL_CLIENT_ID: str = os.getenv("GMAIL_CLIENT_ID", "")
     GMAIL_CLIENT_SECRET: str = os.getenv("GMAIL_CLIENT_SECRET", "")
+    GMAIL_REDIRECT_URI: str = os.getenv("GMAIL_REDIRECT_URI", "")
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     RELEVANCE_THRESHOLD: float = float(os.getenv("RELEVANCE_THRESHOLD", "70.0"))
 

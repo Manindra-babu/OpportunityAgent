@@ -124,8 +124,14 @@ def gmail_oauth_start(
     db.commit()
 
     if settings.GMAIL_CLIENT_ID:
-        base_url = str(request.base_url).rstrip('/')
-        redirect_uri = f"{base_url}/credentials/gmail/oauth/callback"
+        if settings.GMAIL_REDIRECT_URI:
+            redirect_uri = settings.GMAIL_REDIRECT_URI
+        else:
+            base_url = str(request.base_url).rstrip('/')
+            if request.headers.get("x-forwarded-proto") == "https" and base_url.startswith("http://"):
+                base_url = "https://" + base_url[7:]
+            redirect_uri = f"{base_url}/credentials/gmail/oauth/callback"
+
         scope = "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"
         url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={settings.GMAIL_CLIENT_ID}&redirect_uri={redirect_uri}&scope={scope}&access_type=offline&prompt=consent"
         return {"status": "success", "redirect": True, "url": url, "message": f"Connected to Gmail ({current_user.email})!"}
