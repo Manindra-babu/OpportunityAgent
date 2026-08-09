@@ -165,26 +165,41 @@ export default function FeedPage({ opportunities, threshold, onTriggerDiscovery,
                 className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-xs transition flex items-center gap-1.5"
               >
                 <Bell className="w-3.5 h-3.5" />
-                {isProcessing ? 'Saving...' : 'Pre-Register / Remind Me'}
+                {isProcessing ? 'Saving...' : 'Set Reminder / Pre-Register'}
               </button>
             ) : status === 'pending_reply' ? (
-              <>
-                <button
-                  onClick={() => handleAction(opp.id, 'yes')}
-                  disabled={isProcessing}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-xs transition"
-                >
-                  {isProcessing ? 'Processing...' : 'Reply YES (Register)'}
-                </button>
+              score >= threshold ? (
+                <>
+                  <button
+                    onClick={() => handleAction(opp.id, 'yes')}
+                    disabled={isProcessing}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-xs transition"
+                  >
+                    {isProcessing ? 'Processing...' : 'Reply YES (Register)'}
+                  </button>
 
-                <button
-                  onClick={() => handleAction(opp.id, 'skip')}
-                  disabled={isProcessing}
-                  className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium rounded-lg transition"
-                >
-                  Decline / Skip
-                </button>
-              </>
+                  <button
+                    onClick={() => handleAction(opp.id, 'skip')}
+                    disabled={isProcessing}
+                    className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium rounded-lg transition"
+                  >
+                    Decline / Skip
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-zinc-100 text-zinc-500 rounded-lg text-xs font-medium border border-zinc-200">
+                    Auto-Skipped (Below Threshold)
+                  </span>
+                  <button
+                    onClick={() => handleAction(opp.id, 'yes')}
+                    disabled={isProcessing}
+                    className="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition"
+                  >
+                    Register Anyway
+                  </button>
+                </div>
+              )
             ) : (status === 'failed' || status === 'manual_intervention') ? (
               <button
                 onClick={() => handleAction(opp.id, 'register_now')}
