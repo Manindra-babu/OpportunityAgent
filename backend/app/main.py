@@ -1,5 +1,6 @@
 import os
 import logging
+import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +33,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Keep-alive Health Ping Endpoint for 24/7 Uptime Monitors (UptimeRobot / Cron-Job.org)
+@app.get("/health")
+@app.get("/ping")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "OpportunityAgent",
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }
+
 # Include API Routers
 app.include_router(auth.router)
 app.include_router(credentials.router)
@@ -59,7 +70,7 @@ if os.path.exists(FRONTEND_DIST_DIR):
 
     @app.get("/{full_path:path}")
     def serve_frontend_spa(full_path: str):
-        if full_path.startswith(("auth", "credentials", "profile", "opportunities", "news", "settings", "gmail", "activity", "docs", "openapi.json")):
+        if full_path.startswith(("auth", "credentials", "profile", "opportunities", "news", "settings", "gmail", "activity", "health", "ping", "docs", "openapi.json")):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
         index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
         if os.path.exists(index_file):
