@@ -144,29 +144,37 @@ class ActivityLogOut(BaseModel):
     agent_name: str
     action: str
     details: str
-    created_at: datetime.datetime
+    timestamp: Optional[Any] = None
+    created_at: Optional[Any] = None
 
     class Config:
         from_attributes = True
 
 class FailureMemoryOut(BaseModel):
     id: int
-    source_url: str
-    error_type: str
-    error_details: str
-    resolution_status: str
+    source_url: Optional[Any] = None
+    domain: Optional[Any] = None
+    failure_type: Optional[Any] = None
+    error_type: Optional[Any] = None
+    description: Optional[Any] = None
+    error_details: Optional[Any] = None
+    resolution: Optional[Any] = None
+    resolution_status: Optional[Any] = None
     user_fix_note: Optional[str] = None
-    created_at: datetime.datetime
+    created_at: Optional[Any] = None
 
     class Config:
         from_attributes = True
 
 class FieldMappingRuleOut(BaseModel):
     id: int
-    field_name: str
-    mapped_value: str
-    confidence: float
-    created_at: datetime.datetime
+    source_label: Optional[Any] = None
+    field_name: Optional[Any] = None
+    target_profile_field: Optional[Any] = None
+    mapped_value: Optional[Any] = None
+    confidence: Optional[Any] = 1.0
+    domain: Optional[Any] = None
+    created_at: Optional[Any] = None
 
     class Config:
         from_attributes = True

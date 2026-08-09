@@ -29,6 +29,7 @@ import {
   updateThreshold,
   getActivityLogs,
   getFailureMemory,
+  getRules,
   getMetrics,
   submitUserFix
 } from './api/client';
@@ -71,7 +72,7 @@ export default function App() {
 
   const loadUserData = async () => {
     try {
-      const [profData, credData, oppData, newsData, settsData, logData, memData, metData] = await Promise.all([
+      const [profData, credData, oppData, newsData, settsData, logData, memData, rulesData, metData] = await Promise.all([
         getProfile().catch(() => null),
         getCredentialsStatus().catch(() => ({ groq_connected: false, gmail_connected: false })),
         getOpportunities().catch(() => []),
@@ -79,6 +80,7 @@ export default function App() {
         getSettings().catch(() => ({ relevance_threshold: 70 })),
         getActivityLogs().catch(() => []),
         getFailureMemory().catch(() => []),
+        getRules().catch(() => []),
         getMetrics().catch(() => null)
       ]);
 
@@ -89,6 +91,7 @@ export default function App() {
       if (settsData) setSettings(settsData);
       if (logData) setLogs(logData);
       if (memData) setFailureMemory(memData);
+      if (rulesData) setRules(rulesData);
       if (metData) setMetrics(metData);
     } catch (e) {
       console.error('Error loading user data:', e);
@@ -143,8 +146,12 @@ export default function App() {
 
   const handleStartGmailOAuth = async () => {
     const res = await startGmailOAuth();
-    if (res.authorization_url) {
+    if (res?.url) {
+      window.location.href = res.url;
+    } else if (res?.authorization_url) {
       window.location.href = res.authorization_url;
+    } else {
+      await loadUserData();
     }
   };
 
@@ -277,7 +284,7 @@ export default function App() {
             failureMemory={failureMemory}
             rules={rules}
             metrics={metrics}
-            onSubmitUserFix={handleSubmitUserFix}
+            onSubmitFix={handleSubmitUserFix}
           />
         )}
       </main>
