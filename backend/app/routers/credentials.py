@@ -19,6 +19,9 @@ class GroqKeyRequest(BaseModel):
 
 from groq import Groq
 
+import re
+from groq import Groq, AuthenticationError, APIConnectionError, RateLimitError
+
 @router.get("/status")
 def get_credentials_status(
     current_user: User = Depends(get_current_user),
@@ -29,10 +32,9 @@ def get_credentials_status(
     if cred and cred.groq_connected and cred.groq_api_key_encrypted:
         raw_key = decrypt_credential(cred.groq_api_key_encrypted)
         if raw_key:
-            groq_is_valid = True
-        else:
-            cred.groq_connected = False
-            db.commit()
+            cleaned_key = re.sub(r'[\u200b-\u200d\ufeff\xa0]', '', raw_key).strip().strip("'\"“”‘’")
+            if cleaned_key.startswith("gsk_"):
+                groq_is_valid = True
 
     return {
         "groq_connected": groq_is_valid,
@@ -40,29 +42,69 @@ def get_credentials_status(
         "gmail_email": cred.gmail_email if (cred and cred.gmail_connected) else None
     }
 
+
 @router.post("/groq")
 def save_groq_key(
     payload: GroqKeyRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    key = payload.groq_api_key.strip().strip("'").strip('"')
+    raw_input = payload.groq_api_key or ""
+
+    # Sanitize copy-pasted invisible characters, zero-width spaces, non-breaking spaces, BOM, and quotes
+    key = re.sub(r'[\u200b-\u200d\ufeff\xa0]', '', raw_input)
+    key = key.strip().strip("'\"“”‘’")
+
     if not key or key.startswith("•"):
         raise HTTPException(
             status_code=400,
             detail="Please paste your actual Groq API key from console.groq.com/keys."
         )
 
+    if not key.startswith("gsk_"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Groq API key format. Groq API keys must start with 'gsk_'. Please check your key at console.groq.com/keys."
+        )
+
+    # Validate against Groq API
+    validation_success = False
+    last_err_msg = ""
+    
     try:
         client = Groq(api_key=key)
         client.models.list()
-    except Exception as e:
-        err_msg = str(e)
-        logger.warning(f"Groq API key validation warning for user {current_user.id}: {err_msg}")
-        if "401" in err_msg or "invalid" in err_msg.lower() or "authentication" in err_msg.lower():
+        validation_success = True
+    except Exception as e1:
+        last_err_msg = str(e1)
+        # Attempt fallback test completion in case models.list endpoint is restricted
+        try:
+            client = Groq(api_key=key)
+            client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1
+            )
+            validation_success = True
+        except Exception as e2:
+            last_err_msg = str(e2)
+
+    if not validation_success:
+        logger.warning(f"Groq API key validation warning for user {current_user.id}: {last_err_msg}")
+        if "401" in last_err_msg or "invalid" in last_err_msg.lower() or "authentication" in last_err_msg.lower():
             raise HTTPException(
                 status_code=400,
-                detail="Invalid Groq API Key. Please verify your key at console.groq.com/keys."
+                detail="Invalid Groq API Key. Please verify your key at console.groq.com/keys and ensure it is active."
+            )
+        elif "429" in last_err_msg or "rate_limit" in last_err_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="Groq API rate limit reached. Your key format is valid, but Groq rate limit was hit. Please try again shortly."
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Groq API validation failed: {last_err_msg[:120]}"
             )
 
     encrypted_key = encrypt_credential(key)
@@ -172,7 +214,12 @@ def gmail_oauth_callback(
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Gmail Connected | OpportunityAgent</title>
       <script src="https://cdn.tailwindcss.com"></script>
-      <meta http-equiv="refresh" content="2;url=/">
+      <script>
+        setTimeout(function() {{
+          var target = window.location.port === "8000" ? "http://localhost:5173/" : "/";
+          window.location.href = target;
+        }}, 1500);
+      </script>
     </head>
     <body class="bg-zinc-950 text-white min-h-screen flex items-center justify-center font-sans p-4">
       <div class="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
@@ -186,15 +233,16 @@ def gmail_oauth_callback(
           </p>
         </div>
         <div class="pt-2">
-          <a href="/" class="inline-flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shadow-lg">
+          <button onclick="window.location.href = window.location.port === '8000' ? 'http://localhost:5173/' : '/';" class="inline-flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shadow-lg cursor-pointer">
             Return to App Dashboard →
-          </a>
+          </button>
         </div>
-        <p class="text-[11px] text-zinc-500">Redirecting automatically in 2 seconds...</p>
+        <p class="text-[11px] text-zinc-500">Redirecting automatically in 1.5 seconds...</p>
       </div>
     </body>
     </html>
     """
+
     return HTMLResponse(content=html_content, status_code=200)
 
 @router.delete("/gmail")

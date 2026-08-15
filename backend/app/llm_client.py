@@ -21,6 +21,12 @@ class GroqLLMClient:
         if not raw_key:
             return None
 
+        # Sanitize zero-width spaces, BOM, non-breaking spaces, quotes, and whitespace
+        import re
+        raw_key = re.sub(r'[\u200b-\u200d\ufeff\xa0]', '', raw_key).strip().strip("'\"“”‘’")
+        if not raw_key.startswith("gsk_"):
+            return None
+
         try:
             return Groq(api_key=raw_key)
         except Exception as e:

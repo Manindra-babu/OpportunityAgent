@@ -95,9 +95,15 @@ export default function ProfilePage({
           phone: editForm.phone,
           cgpa: editForm.cgpa,
           primary_domain: editForm.primary_domain,
-          skills
+          skills,
+          projects: profile?.projects || [],
+          education: profile?.education || [],
+          github_username: profile?.github_username || null,
+          github_repos: profile?.github_repos || [],
+          resume_path: profile?.resume_path || null
         });
       }
+
       setProfileMsg('Master Profile updated and saved successfully!');
       setIsEditing(false);
       if (onRefresh) await onRefresh();
@@ -145,14 +151,25 @@ export default function ProfilePage({
 
   const handleSaveGroqKey = async (e) => {
     e.preventDefault();
-    if (!groqKeyInput.trim()) return;
+    // Remove zero-width spaces, BOM, non-breaking spaces, quotes, and whitespace
+    const cleanKey = groqKeyInput
+      .replace(/[\u200b-\u200d\ufeff\xa0]/g, '')
+      .trim()
+      .replace(/^['"“”‘’]+|['"“”‘’]+$/g, '');
+
+    if (!cleanKey) return;
+
+    if (!cleanKey.startsWith('gsk_')) {
+      setGroqError('Invalid Groq API key format. Groq API keys must start with "gsk_". Please verify your key at console.groq.com/keys.');
+      return;
+    }
 
     setValidatingGroq(true);
     setGroqError('');
     setGroqSuccessMsg('');
 
     try {
-      await onSaveGroqKey(groqKeyInput.trim());
+      await onSaveGroqKey(cleanKey);
       setGroqSuccessMsg('Groq API Key validated and saved securely!');
       setGroqKeyInput('');
       if (onRefresh) await onRefresh();

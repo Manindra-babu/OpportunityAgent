@@ -188,9 +188,12 @@ def diff_and_merge_profile(
     final_skills = list(old_skills | incoming_skills)
 
     profile.skills = final_skills
-    profile.projects = new_data.get("projects", profile.projects or [])
-    profile.education = new_data.get("education", profile.education or [])
+    if new_data.get("projects"):
+        profile.projects = new_data["projects"]
+    if new_data.get("education"):
+        profile.education = new_data["education"]
     profile.full_name = new_data.get("full_name") or profile.full_name or "Candidate"
+
     profile.email = new_data.get("email") or profile.email
     profile.phone = new_data.get("phone") or profile.phone
     profile.cgpa = str(new_data.get("cgpa") or profile.cgpa or "8.5")

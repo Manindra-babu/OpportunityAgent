@@ -34,17 +34,18 @@ class AuthMessageResponse(BaseModel):
     user: UserResponse
 
 class ProfileBase(BaseModel):
-    skills: List[Any] = []
-    projects: List[Any] = []
-    education: List[Any] = []
+    skills: Optional[List[Any]] = None
+    projects: Optional[List[Any]] = None
+    education: Optional[List[Any]] = None
     github_username: Optional[Any] = None
-    github_repos: List[Any] = []
+    github_repos: Optional[List[Any]] = None
     resume_path: Optional[Any] = None
-    primary_domain: Optional[Any] = "Full Stack Development"
+    primary_domain: Optional[Any] = None
     cgpa: Optional[Any] = None
     full_name: Optional[Any] = None
     email: Optional[Any] = None
     phone: Optional[Any] = None
+
 
 class ProfileCreate(ProfileBase):
     pass
