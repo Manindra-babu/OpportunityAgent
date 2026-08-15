@@ -18,9 +18,14 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 
+def clean_input_str(val: str) -> str:
+    if not val:
+        return ""
+    return re.sub(r'[\u200b-\u200d\ufeff\xa0]', '', str(val)).strip()
+
 @router.post("/request-otp")
 def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
+    email = clean_input_str(payload.email).lower()
 
     if not re.match(EMAIL_REGEX, email):
         raise HTTPException(
@@ -72,10 +77,10 @@ def request_otp(payload: RequestOTPPayload, db: Session = Depends(get_db)):
 
 @router.post("/verify-otp-signup", response_model=AuthMessageResponse)
 def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
-    # Strip spaces and formatting from OTP code
-    otp_code = re.sub(r"\D", "", payload.otp_code)
-    password = payload.password
+    email = clean_input_str(payload.email).lower()
+    otp_code = re.sub(r"\D", "", clean_input_str(payload.otp_code))
+    password = clean_input_str(payload.password)
+    full_name = clean_input_str(payload.full_name) or "Candidate"
 
     if not otp_code or len(otp_code) != 6:
         raise HTTPException(
@@ -89,7 +94,6 @@ def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db
             detail="Password must be at least 6 characters long."
         )
 
-    # Check if user already exists
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(
@@ -123,7 +127,7 @@ def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db
     db.commit()
     db.refresh(user)
 
-    profile = Profile(user_id=user.id, email=email, full_name=payload.full_name or "Candidate")
+    profile = Profile(user_id=user.id, email=email, full_name=full_name)
     cred = UserCredential(user_id=user.id)
     db.add(profile)
     db.add(cred)
@@ -155,8 +159,9 @@ def verify_otp_signup(payload: VerifyOTPAndSignupPayload, response: Response, db
 
 @router.post("/signup", response_model=AuthMessageResponse)
 def signup(payload: UserCreate, response: Response, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
-    password = payload.password
+    email = clean_input_str(payload.email).lower()
+    password = clean_input_str(payload.password)
+    full_name = clean_input_str(payload.full_name) or "Candidate"
 
     if not re.match(EMAIL_REGEX, email):
         raise HTTPException(
@@ -183,7 +188,7 @@ def signup(payload: UserCreate, response: Response, db: Session = Depends(get_db
     db.commit()
     db.refresh(user)
 
-    profile = Profile(user_id=user.id, email=email, full_name=payload.full_name or "Candidate")
+    profile = Profile(user_id=user.id, email=email, full_name=full_name)
     cred = UserCredential(user_id=user.id)
     db.add(profile)
     db.add(cred)
@@ -207,8 +212,8 @@ def signup(payload: UserCreate, response: Response, db: Session = Depends(get_db
 
 @router.post("/login", response_model=AuthMessageResponse)
 def login(payload: UserLogin, response: Response, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
-    password = payload.password
+    email = clean_input_str(payload.email).lower()
+    password = clean_input_str(payload.password)
 
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.password_hash):
@@ -216,6 +221,22 @@ def login(payload: UserLogin, response: Response, db: Session = Depends(get_db))
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password. Please check your credentials and try again."
         )
+
+    token = create_jwt_token(user.id, user.email)
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=604800
+    )
+
+    return AuthMessageResponse(
+        message="Logged in successfully!",
+        token=token,
+        user=UserResponse(id=user.id, email=user.email, created_at=user.created_at)
+    )
 
     token = create_jwt_token(user.id, user.email)
     response.set_cookie(
